@@ -1,0 +1,136 @@
+[
+  {
+    "episode": 1,
+    "promos": [
+      {
+        "start_time": 11.3,
+        "end_time": 43.9,
+        "hook_description": "Matriarch coldly warns Juliana to turn around before she sees Gerald holding Clarissa's hand.",
+        "cliffhanger_description": "Clarissa gloats 'Because he is marrying me' and Juliana gasps in devastation.",
+        "rationale": "Classic wedding day betrayal. Instant viral hook with zero lore required."
+      },
+      {
+        "start_time": 124.2,
+        "end_time": 138.0,
+        "hook_description": "Gerald publicly declares Juliana is of low value and plainness.",
+        "cliffhanger_description": "Juliana's despair turns into icy defiance as string drone swells to black.",
+        "rationale": "High melodrama rejection cut at the climax of Juliana's emotional turn."
+      }
+    ]
+  },
+  {
+    "episode": 2,
+    "promos": [
+      {
+        "start_time": 0.0,
+        "end_time": 27.4,
+        "hook_description": "Gerald coldly opens with 'I cannot marry you, Juliana, you are far too plain.'",
+        "cliffhanger_description": "Juliana demands if her sister is a better choice before the silent crowd.",
+        "rationale": "Unforgiving public shaming with instant emotional tension in the opening seconds."
+      },
+      {
+        "start_time": 69.4,
+        "end_time": 110.0,
+        "hook_description": "Father commands Juliana to step aside and accept Gerald's rejection.",
+        "cliffhanger_description": "Juliana publicly curses the wedding union before exiting.",
+        "rationale": "Family betrayal confrontation with an explosive defiant cliffhanger."
+      }
+    ]
+  },
+  {
+    "episode": 3,
+    "promos": [
+      {
+        "start_time": 69.9,
+        "end_time": 105.0,
+        "hook_description": "Scarred bearded stranger roars 'Take your hands off her' as church guards grab Juliana.",
+        "cliffhanger_description": "Stranger drops to one knee and proposes marriage in front of the congregation.",
+        "rationale": "The defining turning point of the series: instant chivalric rescue and shocking proposal."
+      }
+    ]
+  },
+  {
+    "episode": 4,
+    "promos": [
+      {
+        "start_time": 0.0,
+        "end_time": 32.5,
+        "hook_description": "Clarissa laughs mockingly at the broken soldier proposing to Juliana.",
+        "cliffhanger_description": "Juliana places her hand in Alexander's and accepts the vows.",
+        "rationale": "Defiant retribution against arrogant antagonists; pure underdog empowerment."
+      }
+    ]
+  },
+  {
+    "episode": 5,
+    "promos": [
+      {
+        "start_time": 40.0,
+        "end_time": 85.0,
+        "hook_description": "Stepmother maliciously slaps Juliana's mother's heirloom ledger into the muddy puddle.",
+        "cliffhanger_description": "Alexander drops to his knees in the mud, picks up the ledger, and stares down the family.",
+        "rationale": "Visceral cruelty trigger (destruction of late mother's keepsake) converted into romantic protectiveness."
+      }
+    ]
+  },
+  {
+    "episode": 6,
+    "promos": [
+      {
+        "start_time": 60.0,
+        "end_time": 95.0,
+        "hook_description": "Juliana expects a harsh soldier and breaks down near the hearth.",
+        "cliffhanger_description": "Alexander kneels quietly to kindle the fire, comforting her in silence.",
+        "rationale": "Emotional pivot from aristocracy hostility to tender protective sanctuary."
+      }
+    ]
+  },
+  {
+    "episode": 7,
+    "promos": [
+      {
+        "start_time": 25.0,
+        "end_time": 68.0,
+        "hook_description": "Gerald arrives outside the cottage mocking Juliana's muddy hands and poverty.",
+        "cliffhanger_description": "Alexander looms behind Gerald with quiet menace, making Gerald tremble in fear.",
+        "rationale": "Arrogant ex-fiancé confrontation where the intimidating warrior husband terrifies the bully."
+      }
+    ]
+  },
+  {
+    "episode": 8,
+    "promos": [
+      {
+        "start_time": 15.0,
+        "end_time": 55.0,
+        "hook_description": "Juliana questions how a common soldier knows rare medicinal botany.",
+        "cliffhanger_description": "Alexander notices Juliana's maternal crest and abruptly changes the subject.",
+        "rationale": "Secret identity intrigue; subtle clues teasing Alexander's true identity."
+      }
+    ]
+  },
+  {
+    "episode": 9,
+    "promos": [
+      {
+        "start_time": 75.0,
+        "end_time": 105.0,
+        "hook_description": "Aristocratic conspirators discuss rumors of a dead Duke living in the woodland.",
+        "cliffhanger_description": "Informant confirms the mysterious soldier bears the war scar of the Duke.",
+        "rationale": "High-stakes identity reveal teaser; creates urgent binge-watching pressure."
+      }
+    ]
+  },
+  {
+    "episode": 10,
+    "promos": [
+      {
+        "start_time": 9.0,
+        "end_time": 50.0,
+        "hook_description": "Alexander stumbles into the cottage dripping blood down his arm from an ambush.",
+        "cliffhanger_description": "Juliana tears open his tunic and sees the royal military crest branded across his chest.",
+        "rationale": "Visceral physical danger transitioning directly into an explosive identity reveal."
+      }
+    ]
+  }
+]

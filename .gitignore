@@ -1,0 +1,30 @@
+# Confidential input pack & raw scripts
+assets/
+*.zip
+data/
+uploads/
+temp/
+
+# Environment and secrets
+.env
+*.env.local
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# System / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
