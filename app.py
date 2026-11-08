@@ -36,24 +36,34 @@ def safe_paraphrase(text: str, max_words: int = 8) -> str:
 
 def load_precomputed_results():
     """Load pre-computed production results from real Gemini run."""
-    ranked_path = "outputs/raw_real_run1/raw/all_episodes_promos.json"
-    meta_path = "outputs/raw_real_run1/run_meta.json"
+    ranked_path = "outputs/raw/all_episodes_promos.json"
+    meta_path = "outputs/raw/run_meta.json"
     if not os.path.exists(ranked_path):
-        ranked_path = "outputs/raw/all_episodes_promos.json"
-        meta_path = "outputs/raw/run_meta.json"
+        ranked_path = "outputs/raw_real_run1/raw/all_episodes_promos.json"
+        meta_path = "outputs/raw_real_run1/run_meta.json"
 
     if os.path.exists(ranked_path):
         try:
             with open(ranked_path, "r", encoding="utf-8") as f:
-                promos = json.load(f)
+                episodes = json.load(f)
             meta = {}
             if os.path.exists(meta_path):
                 with open(meta_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-            return promos, meta
+
+            # Flatten candidates across all episodes
+            all_candidates = []
+            if isinstance(episodes, list):
+                for ep in episodes:
+                    ep_num = ep.get("episode")
+                    for c in ep.get("candidates", []):
+                        c["episode"] = ep_num
+                        all_candidates.append(c)
+
+            return all_candidates, episodes, meta
         except Exception:
-            return None, None
-    return None, None
+            return None, None, None
+    return None, None, None
 
 
 st.title("🎬 Kuku Microdrama Promo Discovery")
@@ -68,18 +78,18 @@ tab_overview, tab_runner = st.tabs(["🏆 Ranked Promos", "🚀 Run it yourself"
 # TAB 1: RANKED PROMOS (PUBLIC DASHBOARD)
 # ==============================================================================
 with tab_overview:
-    precomputed_promos, precomputed_meta = load_precomputed_results()
+    precomputed_candidates, raw_episodes, precomputed_meta = load_precomputed_results()
 
     if precomputed_meta:
         m_col1, m_col2, m_col3, m_col4 = st.columns(4)
         with m_col1:
-            st.metric("Model Used", precomputed_meta.get("model_requested", "gemini-3.5-flash-lite"))
+            st.metric("Model Used", precomputed_meta.get("api_model_version_returned") or precomputed_meta.get("model_requested", "gemini-3.5-flash-lite"))
         with m_col2:
             st.metric("Total API Calls", f"{precomputed_meta.get('total_calls', 10)} (All 50 Eps)")
         with m_col3:
             st.metric("Runtime", f"{precomputed_meta.get('runtime_seconds', 156.6):.1f}s")
         with m_col4:
-            st.metric("Est. Total Cost", f"${precomputed_meta.get('estimated_cost_usd', 0.022):.4f}")
+            st.metric("Est. Paid Equivalent", f"${precomputed_meta.get('estimated_paid_tier_equivalent_usd', 0.022):.4f}")
 
     st.markdown(
         "> **Confidentiality & Privacy Safeguard**: In accordance with distribution safeguards, verbatim screenplay lines "
@@ -87,13 +97,12 @@ with tab_overview:
         "in the private submission Drive folder."
     )
 
-    if precomputed_promos:
-        # Sort surviving promos by composite score descending
-        survivors = [p for p in precomputed_promos if p.get("verdict") == "PASS"]
+    if precomputed_candidates:
+        survivors = [c for c in precomputed_candidates if c.get("verdict") == "PASS"]
         survivors.sort(key=lambda x: x.get("composite_score", 0.0), reverse=True)
-
         top_promos = survivors[:15]
-        st.subheader(f"Top 15 High-Converting Promo Clips Across 50 Episodes")
+
+        st.subheader(f"Top 15 Ranked Promos Across All 50 Episodes ({len(survivors)} Passing Promos Discovered)")
 
         for idx, p in enumerate(top_promos, 1):
             with st.container(border=True):
@@ -126,6 +135,33 @@ with tab_overview:
 
                 if p.get("repairs"):
                     st.info(f"**Deterministic Repairs Applied**: {'; '.join(p['repairs'])}")
+
+        st.divider()
+        st.subheader("🔍 Episode Browser (All 50 Episodes)")
+        st.markdown("Inspect discovered promo cutpoints, candidate repairs, and cold judge verdicts for any individual episode:")
+
+        ep_options = sorted(list({ep.get("episode") for ep in (raw_episodes or []) if ep.get("episode") is not None}))
+        if ep_options:
+            selected_ep = st.selectbox("Select Episode to Inspect", ep_options, index=0)
+            target_ep = next((e for e in raw_episodes if e.get("episode") == selected_ep), None)
+            if target_ep:
+                st.markdown(f"**Episode {selected_ep} Logline:** *{target_ep.get('logline', 'N/A')}*")
+                cands = target_ep.get("candidates", [])
+                st.markdown(f"Found **{len(cands)}** candidate clip(s) for Episode {selected_ep}:")
+                for c_idx, c in enumerate(cands, 1):
+                    v_color = "🟢" if c.get("verdict") == "PASS" else "🔴"
+                    with st.expander(
+                        f"{v_color} Candidate #{c_idx}: {c['start_formatted']} - {c['end_formatted']} ({c['duration']:.1f}s) — Verdict: {c.get('verdict', 'N/A')} ({c.get('composite_score', 0.0):.1f}/10)",
+                        expanded=(c.get("verdict") == "PASS"),
+                    ):
+                        st.markdown(f"- **Hook Beat (`{c.get('hook_beat_id')}`)**: \"{safe_paraphrase(c.get('hook_text', ''))}\"")
+                        st.markdown(f"- **Cliffhanger Beat (`{c.get('cliffhanger_beat_id')}`)**: \"{safe_paraphrase(c.get('cliffhanger_text', ''))}\"")
+                        st.markdown(
+                            f"- **Cold Judge Evaluation**: Hook: {c.get('hook_score')}/10 | Cliffhanger: {c.get('cliffhanger_score')}/10 | Standalone: {c.get('standalone_score')}/10"
+                        )
+                        st.markdown(f"- **Judge Rationale**: {c.get('judge_rationale') or c.get('rationale')}")
+                        if c.get("repairs"):
+                            st.caption(f"Repairs: {'; '.join(c['repairs'])}")
     else:
         st.info("No precomputed results found. Run the pipeline in the 'Run it yourself' tab.")
 
