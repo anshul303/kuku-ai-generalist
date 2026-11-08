@@ -1,20 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎬 Kuku Microdrama Promo Discovery — Next.js Dashboard
+
+Modern web dashboard for promotional cutpoint discovery in serialized vertical microdramas (*I Married a Broken Soldier. He was a Duke*).
+
+---
+
+## 🔗 Quick Links & Key Deliverables
+
+| Deliverable / Surface | Description | Link |
+| :--- | :--- | :--- |
+| **🌐 Next.js Dashboard** | Primary Production UI | **[http://localhost:3000](http://localhost:3000)** |
+| **🎈 Streamlit App** | Legacy Streamlit UI | **[http://localhost:8501](http://localhost:8501)** |
+| **🏆 Top 15 Ranked Promos** | Final listwise-ranked promotional cuts | [`../outputs/ranked.md`](../outputs/ranked.md) |
+| **⚠️ Failure Modes & Audits** | 6 documented real failure modes & mitigations | [`../eval/failures.md`](../eval/failures.md) |
+| **📖 System Architecture & Invariants** | System design and engineering runbook | [`../AGENTS.md`](../AGENTS.md) |
+| **📝 Engineering Notes** | Assumptions, quota observations, and prompt logs | [`../NOTES.md`](../NOTES.md) |
+
+---
 
 ## Getting Started
 
-First, run the development server:
-
+Run the production server:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run build
+npx next start -p 3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the dashboard.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

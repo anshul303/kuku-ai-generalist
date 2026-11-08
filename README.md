@@ -1,8 +1,22 @@
-# Kuku Microdrama Promo Discovery Tool
+# 🎬 Kuku Microdrama Promo Discovery Tool
 
-Automated promotional cutpoint extractor for serialized vertical microdramas (Problem Statement 1).
+Automated promotional cutpoint extractor for serialized vertical microdramas (*I Married a Broken Soldier. He was a Duke*, 50 Episodes).
+Discovers high-converting **20 to 60-second** promo ad clips from screenplay files for mobile ad platforms (TikTok, Instagram Reels, YouTube Shorts).
 
-Extracts high-converting **20 to 60-second** promo clips from screenplay files for mobile ad platforms (TikTok, Instagram Reels, YouTube Shorts).
+---
+
+## 🔗 Quick Links & Key Deliverables
+
+| Deliverable / Surface | Description | Link |
+| :--- | :--- | :--- |
+| **🌐 Next.js Dashboard** | Primary UI with Top 15 Promos, 50-Episode Browser, Real-Time Search & Batch Runner | **[http://localhost:3000](http://localhost:3000)** (`frontend/`) |
+| **🎈 Streamlit App** | Alternative Python web dashboard | **[http://localhost:8501](http://localhost:8501)** (`app.py`) |
+| **🏆 Top 15 Ranked Promos** | Final listwise-ranked promotional cuts with exact boundaries and conversion rationales | [`outputs/ranked.md`](outputs/ranked.md) |
+| **⚠️ Failure Modes & Audits** | 6 documented real failure modes, mitigations, and run1 vs run2 evidence | [`eval/failures.md`](eval/failures.md) |
+| **📖 Architecture & Invariants** | System design, cold-viewer rules, duration repair invariants, and operational runbook | [`AGENTS.md`](AGENTS.md) |
+| **📝 Technical Notes & Logs** | Assumptions, quota observations, and prompt engineering logs | [`NOTES.md`](NOTES.md) |
+| **📊 Benchmark Evaluation** | Ground truth label validator, IoU stability evaluator, and baseline comparison | [`eval/evaluate.py`](eval/evaluate.py) |
+| **🔍 Timeline CLI Tool** | Deterministic compact episode timeline visualizer (speakers, beats, shot boundaries) | [`tools/show_episode.py`](tools/show_episode.py) |
 
 ---
 
@@ -34,13 +48,25 @@ python run.py --provider anthropic --model claude-3-5-haiku-latest
 
 *(Offline fallback testing only without API keys: `python run.py --provider mock`)*
 
-### 3. Launch Web App (Streamlit)
+### 3. Launch Web App
+
+#### Option A: Next.js Production Dashboard (Primary, Port 3000)
+```bash
+cd frontend
+npm install
+npm run build
+npx next start -p 3000
+# Open http://localhost:3000
+```
+
+#### Option B: Streamlit Web App (Port 8501)
 ```bash
 streamlit run app.py
+# Open http://localhost:8501
 ```
-- Upload one or multiple screenplay files (`.txt`), or point to a local directory.
-- Select your AI provider (`mock`, `gemini`, `openai`, `anthropic`).
-- Click **"Discover Promos"** to view ranked outputs.
+- Upload one or multiple screenplay files (`.txt`), or run preloaded catalog.
+- Select your AI provider (`gemini`, `mock`, `openai`, `anthropic`).
+- Search by episode (e.g. `3`, `45`), dialogue quotes, or listwise rank (`#1`).
 
 ---
 
