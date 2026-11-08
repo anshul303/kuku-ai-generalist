@@ -10,6 +10,9 @@ import json
 import os
 import tempfile
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from run import process_single_episode
 from src.judge import rank_survivors

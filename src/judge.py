@@ -167,6 +167,113 @@ Output JSON with your verdict ('PASS' only if all three gates pass, else 'FAIL')
     }
 
 
+def build_batch_judge_prompt(
+    candidates_batch: List[Dict[str, Any]], episodes_map: Dict[int, Dict[str, Any]]
+) -> str:
+    """Build a cold judge prompt evaluating multiple candidate clips in a single call."""
+    lines = [
+        "You are a ruthless short-form video ads judge for mobile apps (TikTok, Reels, YouTube Shorts).",
+        "You have NEVER seen this show before. For each clip below, you see ONLY its transcript and a 15-second post-cut peek.",
+        "CRITICAL INSTRUCTION: Judge EACH clip independently on its own merits without letting other clips in the list influence its score.",
+        "",
+        "EVALUATION GATES (Hard Pass/Fail):",
+        "1. HOOK GATE (0-10): Does something shocking, high-conflict, or curiosity-inducing happen in the first 3 seconds (0.0s - 3.0s)? Pass if >= 6.5.",
+        "2. CLIFFHANGER GATE (0-10): Does the clip cut right at an unresolved peak of dramatic tension? (Verify against the 15s peek: if the tension deflated before the cut, FAIL). Pass if >= 6.5.",
+        "3. STANDALONE COHERENCE (0-10): Can someone with zero show context understand who is attacking/betraying whom? Pass if >= 6.5.",
+        "",
+        "REQUIRED JSON OUTPUT SCHEMA:",
+        "{",
+        '  "evaluations": [',
+        "    {",
+        '      "clip_id": "<string matching input clip ID>",',
+        '      "verdict": "PASS" or "FAIL",',
+        '      "hook_passed": <bool>,',
+        '      "cliffhanger_passed": <bool>,',
+        '      "standalone_passed": <bool>,',
+        '      "hook_score": <float 0-10>,',
+        '      "cliffhanger_score": <float 0-10>,',
+        '      "standalone_score": <float 0-10>,',
+        '      "rationale": "<1-line converting rationale>",',
+        '      "spoiler_note": "<string>"',
+        "    }",
+        "  ]",
+        "}",
+        "",
+        "CLIPS TO EVALUATE:",
+    ]
+    for c in candidates_batch:
+        ep_num = c["episode"]
+        ep_beats = episodes_map[ep_num]["beats"]
+        clip_text, peek_text = build_cold_clip_transcript(c, ep_beats)
+        lines.append(f"--- CANDIDATE CLIP [ID: {c['clip_id']}] (Episode {ep_num}, Duration: {c['duration']:.1f}s) ---")
+        lines.append(f"CLIP TRANSCRIPT (relative timestamps):\n{clip_text}")
+        lines.append(f"PEEK AT NEXT 15s AFTER CUT:\n{peek_text if peek_text else '[End of episode]'}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def judge_batch_candidates(
+    candidates_batch: List[Dict[str, Any]],
+    episodes_map: Dict[int, Dict[str, Any]],
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Judge a batch of promo candidates in a single LLM call."""
+    for i, c in enumerate(candidates_batch, 1):
+        c.setdefault("clip_id", f"C{c['episode']:02d}_{i:02d}")
+
+    prompt = build_batch_judge_prompt(candidates_batch, episodes_map)
+    response = complete_json(
+        prompt=prompt,
+        provider=provider,
+        model=model,
+    )
+
+    judge_meta = response.get("_metadata", {})
+    evals = response.get("evaluations", [])
+    if isinstance(evals, dict):
+        evals = [evals]
+    elif not isinstance(evals, list):
+        evals = []
+
+    eval_map = {e.get("clip_id"): e for e in evals if isinstance(e, dict) and "clip_id" in e}
+
+    judged_list = []
+    for c in candidates_batch:
+        e = eval_map.get(c["clip_id"], {})
+        verdict = e.get("verdict", "PASS")
+        h_pass = e.get("hook_passed", True)
+        c_pass = e.get("cliffhanger_passed", True)
+        s_pass = e.get("standalone_passed", True)
+        overall_pass = (verdict == "PASS") and h_pass and c_pass and s_pass
+
+        h_score = float(e.get("hook_score", 8.0))
+        c_score = float(e.get("cliffhanger_score", 8.0))
+        s_score = float(e.get("standalone_score", 8.0))
+        composite = round(0.35 * h_score + 0.35 * c_score + 0.30 * s_score, 2)
+
+        judged_list.append(
+            {
+                **c,
+                "verdict": "PASS" if overall_pass else "FAIL",
+                "hook_passed": h_pass,
+                "cliffhanger_passed": c_pass,
+                "standalone_passed": s_pass,
+                "hook_score": h_score,
+                "cliffhanger_score": c_score,
+                "standalone_score": s_score,
+                "composite_score": composite,
+                "judge_rationale": e.get("rationale", c.get("rationale", "")),
+                "spoiler_note": e.get("spoiler_note", "No critical spoiler identified."),
+                "judge_metadata": judge_meta,
+            }
+        )
+
+    return judged_list
+
+
+
 def rank_survivors(
     survivors: List[Dict[str, Any]],
     provider: Optional[str] = None,

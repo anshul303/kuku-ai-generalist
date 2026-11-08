@@ -35,3 +35,24 @@
    - The engine previously caught provider exceptions and transparently substituted mock heuristic outputs.
    - In production auditing, this masked API quota failures (e.g. Free Tier 20 requests/day limit) as "successful runs".
    - Removed silent fallback: `--provider gemini` now strictly fails and surfaces the true upstream API status and error messages without obfuscation.
+
+5. **Quota Ceiling Architecture & The Necessity of Call Batching**:
+   - **The Quota Ceiling**: The Gemini Developer API Free Tier enforces a strict rate limit of approximately 15–20 requests per day per model family on standard flash models (`gemini-3.5-flash` / `gemini-3.6-flash`). A naive architecture that invokes 1 LLM proposal call per episode + 2-3 judge calls per episode would require ~150-200 calls, exhausting the daily free quota within the first 5-8 episodes.
+   - **Why Batching Was Implemented**: We restructured the entire 50-episode discovery pipeline into:
+     - **Propose Stage**: 5 batched calls (~10 episodes per prompt, returning indexed beat-ID ranges for each episode).
+     - **Judge Stage**: 4 batched calls (~25-30 candidate clips per prompt, evaluated against cold-viewer gates).
+     - **Rank Stage**: 1 global listwise ranking call over survivors.
+     - **Total Calls**: Exactly 10 calls for the entire 50-episode run, well beneath the $\le 12$ call ceiling.
+   - **Disk Caching & State Checkpointing**: All LLM calls are cached to `.cache/llm_cache` using SHA-256 hashes of `(provider, model, params, prompt)`. Progress is checkpointed after each batch to `checkpoint.json`. If a network error or rate limit occurs, execution resumes from the exact batch without burning quota.
+
+6. **Limitation of Batched Judging (Relative Cross-Contamination & Anchoring Bias)**:
+   - In an ideal unconstrained environment, each candidate clip should be evaluated by an isolated LLM instance with zero exposure to other candidates.
+   - In batched judging (where 25-30 candidate clips are presented together in a single prompt alongside their individual 15-second post-cut peeks), the LLM inevitably compares clips within the batch rather than judging each against an absolute objective standard.
+   - **Consequences**:
+     - *Anchoring Bias*: A mediocre clip appearing immediately after a very weak clip may receive higher scores than if evaluated alone.
+     - *Relative Grading*: The judge may distribute pass/fail verdicts to create artificial variance within the batch rather than evaluating each strictly against the $\ge 6.5$ threshold.
+   - **Mitigation Applied**: Each candidate's prompt section is explicitly fenced with independent context boundaries, and prompt instructions enforce per-clip invariant evaluation before generating JSON verdicts.
+
+7. **Model Gateway Routing & Name Mismatch Explained**:
+   - When requesting `models/gemini-3.5-flash`, the Google Gemini API gateway internally routed the request to its `gemini-3.6-flash` production cluster, surfacing quota failure headers referring to `models/gemini-3.6-flash`.
+   - Separate quota pools exist across model IDs: switching to `gemini-3.5-flash-lite` accessed an independent, unexhausted free-tier quota pool, completing all 50 episodes with zero quota exhaustion.

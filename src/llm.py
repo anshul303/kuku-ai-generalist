@@ -5,6 +5,7 @@ Tracks prompt tokens, completion tokens, call counts, and estimated cost.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -19,6 +20,43 @@ logger = logging.getLogger("src.llm")
 logging.basicConfig(level=logging.INFO)
 
 
+class QuotaExceededError(Exception):
+    """Raised when an API provider returns a 429 quota exhaustion error."""
+
+    def __init__(self, message: str, retry_delay: str = "Unknown"):
+        super().__init__(message)
+        self.retry_delay = retry_delay
+
+
+CACHE_DIR = os.getenv("LLM_CACHE_DIR", ".cache/llm_cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def _get_cache_key(prompt: str, provider: str, model: str, params: Optional[Dict[str, Any]] = None) -> str:
+    serialized = f"{provider}:{model}:{json.dumps(params or {}, sort_keys=True)}:{prompt}"
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _load_cache(cache_key: str) -> Optional[Dict[str, Any]]:
+    path = os.path.join(CACHE_DIR, f"{cache_key}.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+
+def _save_cache(cache_key: str, data: Dict[str, Any]):
+    path = os.path.join(CACHE_DIR, f"{cache_key}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.warning(f"Failed to write cache {cache_key}: {e}")
+
+
 # Pricing estimates in USD per million tokens
 PRICING_PER_MILLION = {
     "gemini": {"input": 0.075, "output": 0.30},
@@ -31,6 +69,7 @@ PRICING_PER_MILLION = {
 @dataclass
 class UsageStats:
     total_calls: int = 0
+    cache_hits: int = 0
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
     total_estimated_cost_usd: float = 0.0
@@ -55,6 +94,7 @@ GLOBAL_USAGE = UsageStats()
 def get_usage_summary() -> Dict[str, Any]:
     return {
         "total_calls": GLOBAL_USAGE.total_calls,
+        "cache_hits": GLOBAL_USAGE.cache_hits,
         "total_prompt_tokens": GLOBAL_USAGE.total_prompt_tokens,
         "total_completion_tokens": GLOBAL_USAGE.total_completion_tokens,
         "total_estimated_cost_usd": round(GLOBAL_USAGE.total_estimated_cost_usd, 5),
@@ -221,27 +261,33 @@ def _call_gemini(
     }
 
     resp = None
-    for attempt in range(5):
+    for attempt in range(4):
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=45)
+            resp = requests.post(url, headers=headers, json=payload, timeout=60)
             if resp.status_code == 200:
                 break
-            elif resp.status_code in (429, 503):
-                wait_sec = 2**attempt + 1
-                logger.warning(
-                    f"Gemini API {clean_model} returned {resp.status_code} on attempt {attempt+1}. "
-                    f"Backing off for {wait_sec}s..."
-                )
+            elif resp.status_code == 429:
+                # Quota exceeded: Stop immediately and extract retry info
+                err_data = resp.json().get("error", {})
+                err_msg = err_data.get("message", "Quota limit reached")
+                retry_match = re.search(r"Please retry in ([^\.]+)", err_msg)
+                retry_time = retry_match.group(1).strip() if retry_match else "unknown duration"
+                logger.error(f"Gemini API Quota Exceeded (429). Retry time: {retry_time}. Message: {err_msg[:200]}")
+                raise QuotaExceededError(f"Gemini API Quota Exceeded (429): {err_msg}", retry_delay=retry_time)
+            elif resp.status_code == 503:
+                # Temporary high demand: short backoff
+                wait_sec = 2**attempt + 2
+                logger.warning(f"Gemini 503 high demand spike on attempt {attempt+1}. Retrying in {wait_sec}s...")
                 time.sleep(wait_sec)
             else:
                 raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp.text[:300]}")
         except requests.exceptions.RequestException as e:
-            if attempt == 4:
+            if attempt == 3:
                 raise
-            time.sleep(2**attempt + 1)
+            time.sleep(2**attempt + 2)
     else:
         err_msg = resp.text[:300] if resp is not None else "No response"
-        raise RuntimeError(f"Gemini API rate limit exceeded after 5 retries: {err_msg}")
+        raise RuntimeError(f"Gemini API request failed after retries: {err_msg}")
 
     data = resp.json()
     candidates = data.get("candidates", [])
@@ -389,6 +435,18 @@ def complete_json(
             provider = "mock"
 
     provider = provider.lower().strip()
+    resolved_model = model or ("gemini-3.5-flash-lite" if provider == "gemini" else ("gpt-4o-mini" if provider == "openai" else ("claude-3-5-haiku-latest" if provider == "anthropic" else "mock-rule-engine")))
+
+    # Check disk cache
+    cache_key = _get_cache_key(prompt, provider, resolved_model, schema)
+    cached_res = _load_cache(cache_key)
+    if cached_res is not None:
+        GLOBAL_USAGE.cache_hits += 1
+        logger.info(f"[CACHE HIT] Key {cache_key[:12]}... (0 API calls, $0.00 cost)")
+        cached_copy = json.loads(json.dumps(cached_res))
+        cached_copy.setdefault("_metadata", {})
+        cached_copy["_metadata"]["cached"] = True
+        return cached_copy
 
     if provider == "mock":
         p_tok = estimate_tokens(prompt)
@@ -413,14 +471,21 @@ def complete_json(
             "prompt_tokens": p_tok,
             "completion_tokens": c_tok,
             "cost_usd": 0.0,
+            "cached": False,
         }
+        _save_cache(cache_key, res)
         return res
 
     if provider == "gemini":
-        return _call_gemini(prompt, schema=schema, model=model or "gemini-3.5-flash")
+        result = _call_gemini(prompt, schema=schema, model=resolved_model)
     elif provider == "openai":
-        return _call_openai(prompt, schema=schema, model=model or "gpt-4o-mini")
+        result = _call_openai(prompt, schema=schema, model=resolved_model)
     elif provider == "anthropic":
-        return _call_anthropic(prompt, schema=schema, model=model or "claude-3-5-haiku-latest")
+        result = _call_anthropic(prompt, schema=schema, model=resolved_model)
     else:
         raise ValueError(f"Unknown provider '{provider}'. Choose from gemini, openai, anthropic, mock.")
+
+    result.setdefault("_metadata", {})
+    result["_metadata"]["cached"] = False
+    _save_cache(cache_key, result)
+    return result

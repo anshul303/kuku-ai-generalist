@@ -146,3 +146,127 @@ def propose_candidates(
         )
 
     return candidates
+
+
+def build_batch_beats_prompt(episodes_batch: List[Dict[str, Any]]) -> str:
+    """Format a batch of episodes (~10) into a single compact indexed beats prompt."""
+    ep_nums = [e["episode"] for e in episodes_batch]
+    lines = [
+        f"You are an expert promotional editor for vertical microdrama series (TikTok, Reels, YouTube Shorts).",
+        f"TASK: For each of the {len(episodes_batch)} episodes below (Episodes {ep_nums[0]} to {ep_nums[-1]}), propose 2 to 3 candidate PROMO CLIPS.",
+        "",
+        "CRITICAL RULES:",
+        "1. Clips must be approximately 20 to 60 seconds long.",
+        "2. Hook must be in the first 3 seconds (slap, insult, public betrayal, shocking reveal).",
+        "3. Cliffhanger must cut at an unresolved peak of dramatic tension.",
+        "4. Standalone clarity: Makes immediate sense to someone who has never seen the show.",
+        "5. Output MUST use BEAT IDs ONLY (e.g. 'E01-B003'). DO NOT invent timestamps.",
+        "",
+        "REQUIRED JSON OUTPUT SCHEMA:",
+        "A JSON object with a single key 'episodes', containing a list of episode results:",
+        "{",
+        '  "episodes": [',
+        "    {",
+        '      "episode": <int>,',
+        '      "candidates": [',
+        "        {",
+        '          "start_beat_id": "...",',
+        '          "end_beat_id": "...",',
+        '          "hook_beat_id": "...",',
+        '          "cliffhanger_beat_id": "...",',
+        '          "rationale": "..."',
+        "        }",
+        "      ]",
+        "    }",
+        "  ]",
+        "}",
+        "",
+        "EPISODES TRANSCRIPTS:",
+    ]
+
+    for ep in episodes_batch:
+        lines.append(f"=== EPISODE {ep['episode']}: {ep.get('logline', '')} ===")
+        for b in ep["beats"]:
+            timing = f"({format_timestamp(b['start'])} - {format_timestamp(b['end'])})"
+            if b["kind"] == "dialogue":
+                emo = f" ({b['emotion']})" if b.get("emotion") else ""
+                lines.append(f"[{b['id']}] {timing} {b['speaker']}{emo}: \"{b['text']}\"")
+            elif b["kind"] == "action":
+                lines.append(f"[{b['id']}] {timing} ACTION: {b['text']}")
+            elif b["kind"] == "sfx":
+                lines.append(f"[{b['id']}] {timing} SFX: {b['text']}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def propose_batch_candidates(
+    episodes_batch: List[Dict[str, Any]], provider: Optional[str] = None, model: Optional[str] = None
+) -> Dict[int, List[Dict[str, Any]]]:
+    """Send a batch of ~10 episodes in one LLM call and parse candidates per episode."""
+    prompt = build_batch_beats_prompt(episodes_batch)
+    response = complete_json(
+        prompt=prompt,
+        provider=provider,
+        model=model,
+    )
+
+    batch_meta = response.get("_metadata", {})
+    raw_episodes = response.get("episodes", [])
+    if isinstance(raw_episodes, dict):
+        raw_episodes = [raw_episodes]
+
+    results_by_ep: Dict[int, List[Dict[str, Any]]] = {e["episode"]: [] for e in episodes_batch}
+    ep_map = {e["episode"]: e for e in episodes_batch}
+
+    for ep_entry in raw_episodes:
+        ep_num = ep_entry.get("episode")
+        if ep_num not in ep_map:
+            continue
+
+        episode_data = ep_map[ep_num]
+        beats = episode_data["beats"]
+        beat_map = {b["id"]: b for b in beats}
+        beat_order = {b["id"]: idx for idx, b in enumerate(beats)}
+
+        raw_candidates = ep_entry.get("candidates", [])
+        for raw in raw_candidates:
+            s_id = raw.get("start_beat_id", "").strip()
+            e_id = raw.get("end_beat_id", "").strip()
+            h_id = raw.get("hook_beat_id", "").strip() or s_id
+            c_id = raw.get("cliffhanger_beat_id", "").strip() or e_id
+            rationale = raw.get("rationale", "").strip()
+
+            if s_id not in beat_map or e_id not in beat_map:
+                continue
+
+            if beat_order[s_id] > beat_order[e_id]:
+                s_id, e_id = e_id, s_id
+
+            start_beat = beat_map[s_id]
+            end_beat = beat_map[e_id]
+            hook_beat = beat_map.get(h_id, start_beat)
+            cliff_beat = beat_map.get(c_id, end_beat)
+
+            start_sec = start_beat["start"]
+            end_sec = end_beat["end"]
+
+            results_by_ep[ep_num].append(
+                {
+                    "episode": ep_num,
+                    "start_beat_id": s_id,
+                    "end_beat_id": e_id,
+                    "hook_beat_id": hook_beat["id"],
+                    "cliffhanger_beat_id": cliff_beat["id"],
+                    "start_time": start_sec,
+                    "end_time": end_sec,
+                    "duration": round(end_sec - start_sec, 2),
+                    "hook_text": hook_beat.get("text", ""),
+                    "cliffhanger_text": cliff_beat.get("text", ""),
+                    "rationale": rationale,
+                    "proposal_metadata": batch_meta,
+                }
+            )
+
+    return results_by_ep
+

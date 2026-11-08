@@ -19,9 +19,9 @@ pip install -r requirements.txt
 Export your API key and run the batch discovery pipeline over all 50 episodes:
 
 ```bash
-# Recommended default: Google Gemini (Free Tier / Pay-as-you-go)
+# Recommended default: Google Gemini (Free Tier, <= 10 calls for all 50 episodes)
 export GEMINI_API_KEY="your-gemini-key"
-python run.py --provider gemini --model gemini-2.5-flash
+python run.py --provider gemini --model gemini-3.5-flash-lite
 
 # Or OpenAI:
 export OPENAI_API_KEY="your-openai-key"
@@ -73,15 +73,12 @@ pytest tests/
 ```
 
 ### Run Benchmark Evaluation
-Evaluates Top-3 Hit Rate, stability, and model agreement against hand-curated gold standard promos:
+Evaluates Top-3 Hit Rate, stability, and model agreement against hand-curated gold standard promos (`eval/ground_truth_user.json`):
 ```bash
 python eval/evaluate.py
 ```
 
-### Benchmark Results
-- **Pipeline Top-3 Hit Rate**: **90.0%** (vs 70.0% Heuristic Baseline)
-- **Run-to-Run Stability**: **100.0%** (deterministic beat boundary mapping)
-- **Cross-Model Agreement**: **82.0%**
+> **Evaluation Gate & Audit Note**: In accordance with project auditing standards, previous synthetic evaluation metrics drafted with AI assistance were moved to `eval/ground_truth_ai_drafted.json` and segregated. Final quantitative evaluation benchmarks are gated upon the supply of human ground-truth clips in `eval/ground_truth_user.json`.
 
 ---
 
