@@ -18,10 +18,11 @@ This document details real failure modes observed during automated promo extract
   - In short-form video advertising, proclaiming the protagonist is the Duchess provides **cathartic resolution** to the viewer. When the mystery is answered inside the ad, viewer urgency to install the app or unlock Episode 46 drops sharply.
 - **The Superior Alternative Cut**:
   - **`00:51.80 - 01:14.50` (Duration: 22.7s)**:
-    - Opens with Alexander stepping up to Catherine in righteous fury (`00:51.80`), delivering the accusatory hook: *"You poisoned my mother. You tortured my wife."*
+    - Opens with Alexander stepping up to Catherine in righteous fury (`00:51.80`), delivering the accusatory hook: *"You poisoned my mother. You tortured my wife."* (`00:54.00 - 00:58.00`).
     - Catherine gasps in horrified disbelief: *"Wife?!"* (`01:08.80 - 01:10.50`).
-    - **Cuts immediately at `01:14.50`** as Alexander raises his hand to speak, *before* revealing that she is the Duchess.
-    - Stopping cold on *"Wife?!"* suspends viewers at peak unresolved tension without handing them the resolution.
+    - Alexander begins to address the congregation: *"Before the Crown and before God..."* (`01:11.50 - 01:14.00`).
+    - **Cuts at `01:14.50` on Alexander's unfinished line**, right before he proclaims that she is the Duchess of Ashburton.
+    - Cutting on the unfinished vow after Catherine's shock leaves the revelation suspended at peak unresolved tension without giving away the payoff.
 - **Run 1 vs Run 2 Evidence**:
   - Between Run 1 (`26.4s`) and Run 2 (`59.0s`), run-to-run IoU dropped to **0.447**. Both runs shared the exact start hook (`00:54.00`), but the LLM suffered significant tail-boundary drift because it lacked a negative constraint against cutting after title/status reveals.
 - **Mitigation**: Add a negative heuristic penalty in `src/judge.py` for cutting after full identity/title resolutions (*"I am the Duke / She is the Duchess"*); cut on the accusation or shock reaction preceding the reveal.
@@ -38,8 +39,8 @@ This document details real failure modes observed during automated promo extract
   - In **Run 1**, the model locked onto the maximum allowed upper bound (60.0s), extending the window from `01:09.90` to `02:09.90`. This captured unnecessary trailing ambient crowd murmur and dialogue well after the proposal peak.
   - In **Run 2**, the model drifted to `01:50.90 - 02:25.75`, completely missing the opening hook (*"Take your hands off her!"*) and capturing only the aftermath.
 - **Run 1 vs Run 2 Evidence**:
-  - Temporal overlap between Run 1 and Run 2 for Episode 3 was only **0.250 IoU**—the lowest in the entire 50-episode run alongside Episode 41.
-  - The model exhibited "window maximization bias": when given a $[20s, 60s]$ range, proposal prompts frequently expand candidates toward 60s to aggregate context rather than snapping tightly to the 30–35s dramatic sweet spot.
+  - Temporal overlap between Run 1 and Run 2 for Episode 3 was only **0.250 IoU** (the second-lowest across all 50 episodes: lowest was E41 at 0.177, then E03 at 0.250, then E46 at 0.344).
+  - **Hypothesis (Window Maximization Bias)**: When given a $[20s, 60s]$ range, proposal prompts may tend to expand candidates toward 60s to aggregate context rather than snapping tightly to the 30–35s dramatic sweet spot.
 - **Mitigation**: Implement an action-decay cutpoint detector: once a major climax beat (e.g., a proposal or physical confrontation) concludes and subsequent beats transition to dialogue tags with low emotional intensity, force the cut within $\le 3.0s$.
 
 ---
