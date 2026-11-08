@@ -1,10 +1,50 @@
 # Evaluation: Failure Modes & Edge Case Analysis
 
-This document details 6 real failure modes observed during automated promo extraction on *I Married a Broken Soldier. He was a Duke*, including specific episodes, timestamps, root causes, and recommended mitigation.
+This document details real failure modes observed during automated promo extraction on *I Married a Broken Soldier. He was a Duke*, including specific episodes, timestamps, root causes, run1 vs run2 evidence, and recommended mitigations.
 
 ---
 
-### Failure 1: Lore-Dependent Irony (High Intrinsic Drama, Zero Cold Context)
+### Failure 1: Cutting on Cathartic Payoff vs. Unresolved Cliffhanger (The Episode 45 Trap)
+- **Episode**: Episode 45
+- **Timestamps Picked by Tool**:
+  - **Run 1**: `00:54.00 - 01:20.40` (Duration: 26.4s | Beat `E45-B024` to `E45-B032`)
+  - **Run 2**: `00:54.00 - 01:53.00` (Duration: 59.0s | Beat `E45-B024` to `E45-B043`)
+- **What the tool picked**:
+  - Opens on Alexander's visceral confrontation: *"You poisoned my mother. You tortured my wife."*
+  - In **Run 1**, the cut landed at `01:20.40`, directly after Alexander proclaims: *"Lady Juliana Ashcroft is my lawful wife... and the Duchess of Ashburton!"*
+  - In **Run 2**, the cut drifted all the way to `01:53.00`, capturing Rupert's shellshocked reaction, Alexander walking through the crowd, and a bishop entering.
+- **Why it failed**:
+  - The model treated the grand climax proclamation as the cliffhanger.
+  - In short-form video advertising, proclaiming the protagonist is the Duchess provides **cathartic resolution** to the viewer. When the mystery is answered inside the ad, viewer urgency to install the app or unlock Episode 46 drops sharply.
+- **The Superior Alternative Cut**:
+  - **`00:51.80 - 01:14.50` (Duration: 22.7s)**:
+    - Opens with Alexander stepping up to Catherine in righteous fury (`00:51.80`), delivering the accusatory hook: *"You poisoned my mother. You tortured my wife."*
+    - Catherine gasps in horrified disbelief: *"Wife?!"* (`01:08.80 - 01:10.50`).
+    - **Cuts immediately at `01:14.50`** as Alexander raises his hand to speak, *before* revealing that she is the Duchess.
+    - Stopping cold on *"Wife?!"* suspends viewers at peak unresolved tension without handing them the resolution.
+- **Run 1 vs Run 2 Evidence**:
+  - Between Run 1 (`26.4s`) and Run 2 (`59.0s`), run-to-run IoU dropped to **0.447**. Both runs shared the exact start hook (`00:54.00`), but the LLM suffered significant tail-boundary drift because it lacked a negative constraint against cutting after title/status reveals.
+- **Mitigation**: Add a negative heuristic penalty in `src/judge.py` for cutting after full identity/title resolutions (*"I am the Duke / She is the Duchess"*); cut on the accusation or shock reaction preceding the reveal.
+
+---
+
+### Failure 2: 60-Second Window Drift & Proposal Boundary Instability (Episode 3)
+- **Episode**: Episode 3
+- **Timestamps Picked by Tool**:
+  - **Run 1**: `01:09.90 - 02:09.90` (Duration: 60.0s | Beat `E03-B043` to `E03-B057`)
+  - **Run 2**: `01:50.90 - 02:25.75` (Duration: 34.85s | Beat `E03-B053` to `E03-B057`)
+- **What happened**:
+  - In Episode 3, the cathedral guards seize Juliana. The scarred stranger shouts *"Take your hands off her!"* (`01:09.90`), steps in, drops to one knee, and proposes: *"Lady Juliana... accept my hand"* (`01:37.50 - 01:40.30`).
+  - In **Run 1**, the model locked onto the maximum allowed upper bound (60.0s), extending the window from `01:09.90` to `02:09.90`. This captured unnecessary trailing ambient crowd murmur and dialogue well after the proposal peak.
+  - In **Run 2**, the model drifted to `01:50.90 - 02:25.75`, completely missing the opening hook (*"Take your hands off her!"*) and capturing only the aftermath.
+- **Run 1 vs Run 2 Evidence**:
+  - Temporal overlap between Run 1 and Run 2 for Episode 3 was only **0.250 IoU**—the lowest in the entire 50-episode run alongside Episode 41.
+  - The model exhibited "window maximization bias": when given a $[20s, 60s]$ range, proposal prompts frequently expand candidates toward 60s to aggregate context rather than snapping tightly to the 30–35s dramatic sweet spot.
+- **Mitigation**: Implement an action-decay cutpoint detector: once a major climax beat (e.g., a proposal or physical confrontation) concludes and subsequent beats transition to dialogue tags with low emotional intensity, force the cut within $\le 3.0s$.
+
+---
+
+### Failure 3: Lore-Dependent Irony (High Intrinsic Drama, Zero Cold Context)
 - **Episode**: Episode 8
 - **Timestamps**: `00:16.30 - 00:48.50` (Duration: 32.2s)
 - **What the tool picked**: Alexander discussing rare alpine herbs with Juliana beside the hearth, remarking that *"soldiers learn quickly which plants keep a man alive."*
@@ -16,7 +56,7 @@ This document details 6 real failure modes observed during automated promo extra
 
 ---
 
-### Failure 2: Visual Action without Dialogue (Text-Blindness)
+### Failure 4: Visual Action without Dialogue (Text-Blindness)
 - **Episode**: Episode 5
 - **Timestamps**: `00:54.00 - 01:18.00` (Duration: 24.0s)
 - **What the tool picked**: A dialogue-heavy exchange between Juliana and Lady Ashcroft before the climax, cutting right at `00:54.00`.
@@ -29,7 +69,7 @@ This document details 6 real failure modes observed during automated promo extra
 
 ---
 
-### Failure 3: Deflated "Fake" Cliffhanger
+### Failure 5: Deflated "Fake" Cliffhanger
 - **Episode**: Episode 6
 - **Timestamps**: `00:00.00 - 00:26.50` (Duration: 26.5s)
 - **What the tool picked**: Juliana standing outside the dark woodland cabin in the rain, hesitating before the latch.
@@ -42,8 +82,8 @@ This document details 6 real failure modes observed during automated promo extra
 
 ---
 
-### Failure 4: Rapid-Fire Multi-Speaker Interruptions & Cutpoint Drift
-- **Episode**: Episode 3
+### Failure 6: Rapid-Fire Multi-Speaker Interruptions & Cutpoint Drift
+- **Episode**: Episode 3 (Mid-scene dialogue)
 - **Timestamps**: `00:45.20 - 01:12.80` (Duration: 27.6s)
 - **What the tool picked**: The cathedral confrontation where the Priest orders guards to seize Juliana.
 - **Why it failed**:
@@ -54,7 +94,7 @@ This document details 6 real failure modes observed during automated promo extra
 
 ---
 
-### Failure 5: Late-Season Culmination Spoilers
+### Failure 7: Late-Season Culmination Spoilers
 - **Episode**: Episode 49
 - **Timestamps**: `00:12.00 - 00:52.00` (Duration: 40.0s)
 - **What the tool picked**: The formal royal unmasking where the High Chancellor kneels before Alexander, proclaiming him the surviving Duke of Ashbourne, while Gerald is arrested for treason.
@@ -66,7 +106,7 @@ This document details 6 real failure modes observed during automated promo extra
 
 ---
 
-### Failure 6: Pronoun Ambiguity / Dangling Reference
+### Failure 8: Pronoun Ambiguity / Dangling Reference
 - **Episode**: Episode 14
 - **Timestamps**: `00:32.00 - 00:58.00` (Duration: 26.0s)
 - **What the tool picked**: A heated argument where a visitor exclaims: *"He knew about the forged signature all along!"*
