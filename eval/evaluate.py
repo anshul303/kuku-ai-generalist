@@ -15,10 +15,16 @@ from src.validate import compute_interval_overlap, validate_candidates
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("eval")
 
-IOU_HIT_THRESHOLD = 0.35  # Minimum overlap to count as an editor hit
+IOU_HIT_THRESHOLD = 0.50  # Strict >= 50% temporal overlap threshold
 
 
-def load_ground_truth(filepath: str = "eval/ground_truth.json") -> List[Dict[str, Any]]:
+def load_ground_truth(filepath: str = "eval/ground_truth_user.json") -> List[Dict[str, Any]]:
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(
+            f"Ground truth file '{filepath}' not found. "
+            "Please supply human editor gold-standard promos in eval/ground_truth_user.json. "
+            "AI-drafted labels (eval/ground_truth_ai_drafted.json) are excluded from official evaluation."
+        )
     with open(filepath, "r", encoding="utf-8") as f:
         return json.load(f)
 

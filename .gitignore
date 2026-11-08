@@ -4,6 +4,7 @@ assets/
 data/
 uploads/
 temp/
+outputs/
 
 # Environment and secrets
 .env
