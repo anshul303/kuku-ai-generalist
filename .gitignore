@@ -1,7 +1,7 @@
 # Confidential input pack & raw scripts
 assets/
 *.zip
-data/
+/data/
 uploads/
 temp/
 outputs/
@@ -30,3 +30,10 @@ ENV/
 Thumbs.db
 .idea/
 .vscode/
+
+# Frontend
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+

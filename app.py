@@ -102,7 +102,29 @@ with tab_overview:
         survivors.sort(key=lambda x: x.get("composite_score", 0.0), reverse=True)
         top_promos = survivors[:15]
 
-        st.subheader(f"Top 15 Ranked Promos Across All 50 Episodes ({len(survivors)} Passing Promos Discovered)")
+        # Universal Search Bar for Dashboard
+        search_kw = st.text_input(
+            "🔍 Search Promos & Episodes",
+            placeholder="Search by episode (e.g. '45', 'Ep 3'), character (Juliana, Alexander), dialogue quote, or #rank...",
+            key="dashboard_search",
+        )
+
+        target_ep_num = None
+        if search_kw.strip():
+            kw = search_kw.strip().lower()
+            ep_num_match = re.match(r"^(?:ep(?:isode)?\.?|e)?\s*#?\s*0*([1-9][0-9]?)$", kw)
+            if ep_num_match:
+                target_ep_num = int(ep_num_match.group(1))
+
+            def matches_promo(p):
+                if target_ep_num is not None and p.get("episode") == target_ep_num:
+                    return True
+                corpus = f"episode {p.get('episode')} ep {p.get('episode')} {p.get('start_formatted', '')} {p.get('end_formatted', '')} {p.get('hook_text', '')} {p.get('cliffhanger_text', '')} {p.get('rationale', '')} {p.get('judge_rationale', '')}".lower()
+                return all(tok in corpus for tok in kw.split())
+
+            top_promos = [p for p in top_promos if matches_promo(p)]
+
+        st.subheader(f"Top Ranked Promos ({len(top_promos)} Shown / {len(survivors)} Discovered)")
 
         for idx, p in enumerate(top_promos, 1):
             with st.container(border=True):
@@ -141,8 +163,22 @@ with tab_overview:
         st.markdown("Inspect discovered promo cutpoints, candidate repairs, and cold judge verdicts for any individual episode:")
 
         ep_options = sorted(list({ep.get("episode") for ep in (raw_episodes or []) if ep.get("episode") is not None}))
+        if search_kw.strip():
+            def matches_ep(e):
+                ep_num = e.get("episode")
+                if target_ep_num is not None and ep_num == target_ep_num:
+                    return True
+                cand_texts = " ".join((c.get("hook_text", "") + " " + c.get("cliffhanger_text", "") + " " + str(c.get("rationale", ""))) for c in e.get("candidates", []))
+                corpus = f"episode {ep_num} ep {ep_num} {e.get('logline', '')} {cand_texts}".lower()
+                return all(tok in corpus for tok in search_kw.strip().lower().split())
+            ep_options = [ep_num for ep_num in ep_options if any(e.get("episode") == ep_num and matches_ep(e) for e in (raw_episodes or []))]
+
         if ep_options:
-            selected_ep = st.selectbox("Select Episode to Inspect", ep_options, index=0)
+            selected_ep = st.selectbox(
+                f"Select Episode to Inspect ({len(ep_options)} shown)",
+                ep_options,
+                index=0,
+            )
             target_ep = next((e for e in raw_episodes if e.get("episode") == selected_ep), None)
             if target_ep:
                 st.markdown(f"**Episode {selected_ep} Logline:** *{target_ep.get('logline', 'N/A')}*")
@@ -162,6 +198,8 @@ with tab_overview:
                         st.markdown(f"- **Judge Rationale**: {c.get('judge_rationale') or c.get('rationale')}")
                         if c.get("repairs"):
                             st.caption(f"Repairs: {'; '.join(c['repairs'])}")
+        else:
+            st.warning(f"No episodes matched your search query '{search_kw}'.")
     else:
         st.info("No precomputed results found. Run the pipeline in the 'Run it yourself' tab.")
 

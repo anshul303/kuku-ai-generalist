@@ -144,6 +144,50 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
 
 def _mock_propose_response(prompt: str) -> Dict[str, Any]:
     """Generate realistic candidate beat ranges from the episode transcript in the prompt."""
+    # Check if this is a batched multi-episode prompt
+    matches = list(re.finditer(r"===\s*EPISODE\s*(\d+)", prompt))
+    if len(matches) >= 2:
+        episodes_output = []
+        for i, m in enumerate(matches):
+            ep_num = int(m.group(1))
+            start_pos = m.end()
+            end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(prompt)
+            chunk = prompt[start_pos:end_pos]
+
+            beat_ids = re.findall(r"\[(E\d+-B\d+)\]", chunk)
+            if not beat_ids:
+                beat_ids = re.findall(r"(E\d+-B\d+)", chunk)
+            if not beat_ids:
+                beat_ids = [f"E{ep_num:02d}-B001", f"E{ep_num:02d}-B005", f"E{ep_num:02d}-B015", f"E{ep_num:02d}-B025"]
+
+            n = len(beat_ids)
+            cands = []
+            # Candidate 1: Opening hook (beats 0 to ~10)
+            end_idx_1 = min(n - 1, max(3, n // 3))
+            cands.append({
+                "start_beat_id": beat_ids[0],
+                "end_beat_id": beat_ids[end_idx_1],
+                "hook_beat_id": beat_ids[min(1, n - 1)],
+                "cliffhanger_beat_id": beat_ids[end_idx_1],
+                "rationale": "High-impact opening confrontation immediately establishes emotional stakes without prior context.",
+            })
+            # Candidate 2: Mid/Climax escalation
+            if n > 8:
+                start_idx_2 = max(0, n - max(4, n // 3))
+                end_idx_2 = n - 1
+                cands.append({
+                    "start_beat_id": beat_ids[start_idx_2],
+                    "end_beat_id": beat_ids[end_idx_2],
+                    "hook_beat_id": beat_ids[start_idx_2],
+                    "cliffhanger_beat_id": beat_ids[end_idx_2],
+                    "rationale": "Climax escalation ending on an unresolved cliffhanger right before the cut.",
+                })
+            episodes_output.append({"episode": ep_num, "candidates": cands})
+        return {"episodes": episodes_output}
+
+
+
+    # Otherwise, single episode prompt
     beat_ids = re.findall(r"\[(E\d+-B\d+)\]", prompt)
     if not beat_ids:
         # Fallback if pattern is slightly different
@@ -166,6 +210,7 @@ def _mock_propose_response(prompt: str) -> Dict[str, Any]:
             "rationale": "High-impact opening confrontation immediately establishes the emotional stakes with no prior context required.",
         }
     )
+
 
     # Candidate 2: Mid-episode escalation
     if n > 12:
@@ -200,16 +245,44 @@ def _mock_propose_response(prompt: str) -> Dict[str, Any]:
 
 def _mock_judge_response(prompt: str) -> Dict[str, Any]:
     """Generate mock cold-viewer evaluation and listwise ranking."""
-    # Check if prompt is a listwise ranking prompt or single clip judge
-    if "rank" in prompt.lower() or "survivors" in prompt.lower() or "candidates" in prompt.lower():
-        # Listwise ranking
+    prompt_lower = prompt.lower()
+
+    # Case 1: Batch candidate judging (asking for 'evaluations')
+    if "evaluations" in prompt_lower or "candidate clip [id:" in prompt_lower:
+        clip_ids = re.findall(r"\[ID:\s*([^\]]+)\]", prompt)
+        if not clip_ids:
+            clip_ids = re.findall(r"C\d+_\d+", prompt)
+        evals = []
+        for i, cid in enumerate(clip_ids):
+            # Give realistic passing and varied scores
+            h_s = round(8.5 + ((i * 3) % 10) * 0.1, 1)
+            c_s = round(8.4 + ((i * 7) % 10) * 0.1, 1)
+            s_s = round(8.2 + ((i * 5) % 10) * 0.1, 1)
+            evals.append(
+                {
+                    "clip_id": cid,
+                    "verdict": "PASS",
+                    "hook_passed": True,
+                    "cliffhanger_passed": True,
+                    "standalone_passed": True,
+                    "hook_score": min(9.8, h_s),
+                    "cliffhanger_score": min(9.8, c_s),
+                    "standalone_score": min(9.5, s_s),
+                    "rationale": "High-tension melodramatic conflict stops feeds cold with an unresolved cliffhanger.",
+                    "spoiler_note": "Safe for initial ad campaigns.",
+                }
+            )
+        return {"evaluations": evals}
+
+    # Case 2: Listwise ranking of passing survivors
+    if "rank" in prompt_lower or "survivors" in prompt_lower:
         clip_ids = re.findall(r"Candidate\s*#?(\d+)", prompt, re.IGNORECASE)
         if not clip_ids:
-            clip_ids = ["1", "2", "3"]
+            clip_ids = [str(i) for i in range(1, 16)]
 
         ranked_list = []
-        for i, cid in enumerate(clip_ids):
-            score = round(9.5 - (i * 0.4), 2)
+        for i, cid in enumerate(clip_ids[:15]):
+            score = round(9.2 - (i * 0.15), 2)
             ranked_list.append(
                 {
                     "candidate_id": int(cid),
@@ -227,18 +300,20 @@ def _mock_judge_response(prompt: str) -> Dict[str, Any]:
                 }
             )
         return {"rankings": ranked_list}
-    else:
-        return {
-            "verdict": "PASS",
-            "hook_passed": True,
-            "cliffhanger_passed": True,
-            "standalone_passed": True,
-            "hook_score": 9.0,
-            "cliffhanger_score": 8.8,
-            "standalone_score": 9.2,
-            "rationale": "Strong opening hook, intense cliffhanger, and crystal-clear melodrama dynamics.",
-            "spoiler_note": "Safe for initial ad campaigns.",
-        }
+
+    # Case 3: Single clip judge fallback
+    return {
+        "verdict": "PASS",
+        "hook_passed": True,
+        "cliffhanger_passed": True,
+        "standalone_passed": True,
+        "hook_score": 9.0,
+        "cliffhanger_score": 8.8,
+        "standalone_score": 9.2,
+        "rationale": "Strong opening hook, intense cliffhanger, and crystal-clear melodrama dynamics.",
+        "spoiler_note": "Safe for initial ad campaigns.",
+    }
+
 
 
 def _call_gemini(
@@ -551,18 +626,19 @@ def complete_json(
     if provider == "mock":
         p_tok = estimate_tokens(prompt)
         schema_props = schema.get("properties", {}) if schema else {}
-        if "candidates" in schema_props:
+        prompt_head = prompt[:500].lower()
+
+        if "promotional editor" in prompt_head or "propose" in prompt_head or "candidates" in schema_props:
             res = _mock_propose_response(prompt)
-        elif "rankings" in schema_props:
+        elif "evaluations" in schema_props or "video ads judge" in prompt_head or "evaluation gates" in prompt_head:
+            res = _mock_judge_response(prompt)
+        elif "rankings" in schema_props or "listwise" in prompt_head or "rank the following" in prompt_head:
             res = _mock_judge_response(prompt)
         elif "verdict" in schema_props:
             res = _mock_judge_response(prompt)
-        elif "rank" in prompt.lower() and "survivor" in prompt.lower():
-            res = _mock_judge_response(prompt)
-        elif "ruthless" in prompt.lower() or "evaluation gates" in prompt.lower():
-            res = _mock_judge_response(prompt)
         else:
             res = _mock_propose_response(prompt)
+
         c_tok = estimate_tokens(json.dumps(res))
         GLOBAL_USAGE.log_call("mock", p_tok, c_tok, 0.0)
         res["_metadata"] = {
