@@ -9,8 +9,9 @@ Discovers high-converting **20 to 60-second** promo ad clips from screenplay fil
 
 | Deliverable / Surface | Description | Link |
 | :--- | :--- | :--- |
-| **🌐 Next.js Dashboard** | Primary UI with Top 15 Promos, 50-Episode Browser, Real-Time Search & Batch Runner | **[http://localhost:3000](http://localhost:3000)** (`frontend/`) |
-| **🎈 Streamlit App** | Alternative Python web dashboard | **[http://localhost:8501](http://localhost:8501)** (`app.py`) |
+| **🚀 Live Deployed Website (Vercel)** | Production Next.js web application deployed live on Vercel | **[https://kuku-ai-generalist.vercel.app/](https://kuku-ai-generalist.vercel.app/)** |
+| **🌐 Local Next.js Dashboard** | Primary UI with Top 15 Promos, 50-Episode Browser, Real-Time Search & Batch Runner | **[http://localhost:3000](http://localhost:3000)** (`frontend/`) |
+| **🎈 Local Streamlit App** | Alternative Python web dashboard | **[http://localhost:8501](http://localhost:8501)** (`app.py`) |
 | **🏆 Top 15 Ranked Promos** | Final listwise-ranked promotional cuts with exact boundaries and conversion rationales | [`outputs/ranked.md`](outputs/ranked.md) |
 | **⚠️ Failure Modes & Audits** | 6 documented real failure modes, mitigations, and run1 vs run2 evidence | [`eval/failures.md`](eval/failures.md) |
 | **📖 Architecture & Invariants** | System design, cold-viewer rules, duration repair invariants, and operational runbook | [`AGENTS.md`](AGENTS.md) |
@@ -50,7 +51,9 @@ python run.py --provider anthropic --model claude-3-5-haiku-latest
 
 ### 3. Launch Web App
 
-#### Option A: Next.js Production Dashboard (Primary, Port 3000)
+> **🚀 Live Web Deployment**: The Next.js dashboard is deployed and publicly accessible at **[https://kuku-ai-generalist.vercel.app/](https://kuku-ai-generalist.vercel.app/)** with zero local setup required.
+
+#### Option A: Next.js Production Dashboard (Local, Port 3000)
 ```bash
 cd frontend
 npm install

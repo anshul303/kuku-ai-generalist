@@ -8,8 +8,9 @@ Modern web dashboard for promotional cutpoint discovery in serialized vertical m
 
 | Deliverable / Surface | Description | Link |
 | :--- | :--- | :--- |
-| **🌐 Next.js Dashboard** | Primary Production UI | **[http://localhost:3000](http://localhost:3000)** |
-| **🎈 Streamlit App** | Legacy Streamlit UI | **[http://localhost:8501](http://localhost:8501)** |
+| **🚀 Live Deployed Website (Vercel)** | Production Next.js web application deployed live on Vercel | **[https://kuku-ai-generalist.vercel.app/](https://kuku-ai-generalist.vercel.app/)** |
+| **🌐 Local Next.js Dashboard** | Primary Production UI | **[http://localhost:3000](http://localhost:3000)** |
+| **🎈 Local Streamlit App** | Legacy Streamlit UI | **[http://localhost:8501](http://localhost:8501)** |
 | **🏆 Top 15 Ranked Promos** | Final listwise-ranked promotional cuts | [`../outputs/ranked.md`](../outputs/ranked.md) |
 | **⚠️ Failure Modes & Audits** | 6 documented real failure modes & mitigations | [`../eval/failures.md`](../eval/failures.md) |
 | **📖 System Architecture & Invariants** | System design and engineering runbook | [`../AGENTS.md`](../AGENTS.md) |
