@@ -234,6 +234,13 @@ def _call_gemini(
         completion_tokens * PRICING_PER_MILLION["gemini"]["output"] / 1_000_000
     )
     GLOBAL_USAGE.log_call("gemini", prompt_tokens, completion_tokens, cost)
+    parsed["_metadata"] = {
+        "provider": "gemini",
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": cost,
+    }
     return parsed
 
 
@@ -269,6 +276,13 @@ def _call_openai(
         completion_tokens * PRICING_PER_MILLION["openai"]["output"] / 1_000_000
     )
     GLOBAL_USAGE.log_call("openai", prompt_tokens, completion_tokens, cost)
+    parsed["_metadata"] = {
+        "provider": "openai",
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": cost,
+    }
     return parsed
 
 
@@ -305,6 +319,13 @@ def _call_anthropic(
         completion_tokens * PRICING_PER_MILLION["anthropic"]["output"] / 1_000_000
     )
     GLOBAL_USAGE.log_call("anthropic", prompt_tokens, completion_tokens, cost)
+    parsed["_metadata"] = {
+        "provider": "anthropic",
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": cost,
+    }
     return parsed
 
 
@@ -334,7 +355,6 @@ def complete_json(
 
     if provider == "mock":
         p_tok = estimate_tokens(prompt)
-        # Check task based on schema or prompt structure
         schema_props = schema.get("properties", {}) if schema else {}
         if "candidates" in schema_props:
             res = _mock_propose_response(prompt)
@@ -350,6 +370,13 @@ def complete_json(
             res = _mock_propose_response(prompt)
         c_tok = estimate_tokens(json.dumps(res))
         GLOBAL_USAGE.log_call("mock", p_tok, c_tok, 0.0)
+        res["_metadata"] = {
+            "provider": "mock",
+            "model": "mock-rule-engine",
+            "prompt_tokens": p_tok,
+            "completion_tokens": c_tok,
+            "cost_usd": 0.0,
+        }
         return res
 
     try:
@@ -375,4 +402,11 @@ def complete_json(
             res = _mock_propose_response(prompt)
         c_tok = estimate_tokens(json.dumps(res))
         GLOBAL_USAGE.log_call("mock_fallback", p_tok, c_tok, 0.0)
+        res["_metadata"] = {
+            "provider": "mock_fallback",
+            "model": "mock-fallback",
+            "prompt_tokens": p_tok,
+            "completion_tokens": c_tok,
+            "cost_usd": 0.0,
+        }
         return res

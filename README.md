@@ -15,16 +15,24 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Run CLI (Full Batch on All 50 Episodes)
-Run with offline mock provider (0 API cost):
+### 2. Run CLI with Real Provider (Gemini / OpenAI / Anthropic)
+Export your API key and run the batch discovery pipeline over all 50 episodes:
+
 ```bash
-python run.py --provider mock
-```
-Run with Google Gemini (Free Tier):
-```bash
+# Recommended default: Google Gemini (Free Tier / Pay-as-you-go)
 export GEMINI_API_KEY="your-gemini-key"
-python run.py --provider gemini
+python run.py --provider gemini --model gemini-2.5-flash
+
+# Or OpenAI:
+export OPENAI_API_KEY="your-openai-key"
+python run.py --provider openai --model gpt-4o-mini
+
+# Or Anthropic:
+export ANTHROPIC_API_KEY="your-anthropic-key"
+python run.py --provider anthropic --model claude-3-5-haiku-latest
 ```
+
+*(Offline fallback testing only without API keys: `python run.py --provider mock`)*
 
 ### 3. Launch Web App (Streamlit)
 ```bash

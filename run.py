@@ -69,10 +69,29 @@ def process_single_episode(
             )
             evaluated.append(judged)
 
+    # Aggregate token stats for episode
+    ep_prompt_tokens = 0
+    ep_comp_tokens = 0
+    ep_cost = 0.0
+
+    for c in evaluated:
+        p_meta = c.get("proposal_metadata", {})
+        j_meta = c.get("judge_metadata", {})
+        ep_prompt_tokens += p_meta.get("prompt_tokens", 0) + j_meta.get("prompt_tokens", 0)
+        ep_comp_tokens += p_meta.get("completion_tokens", 0) + j_meta.get("completion_tokens", 0)
+        ep_cost += p_meta.get("cost_usd", 0.0) + j_meta.get("cost_usd", 0.0)
+
     return {
         "episode": ep_num,
         "logline": ep_data.get("logline", ""),
         "total_beats": len(beats),
+        "provider": provider if not use_baseline else "baseline_heuristic",
+        "model": model or ("baseline_rule_engine" if use_baseline else ("mock-rule-engine" if provider == "mock" else model)),
+        "telemetry": {
+            "prompt_tokens": ep_prompt_tokens,
+            "completion_tokens": ep_comp_tokens,
+            "estimated_cost_usd": round(ep_cost, 5),
+        },
         "candidates": evaluated,
     }
 

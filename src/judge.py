@@ -149,6 +149,8 @@ Output JSON with your verdict ('PASS' only if all three gates pass, else 'FAIL')
 
     composite = round(0.35 * h_score + 0.35 * c_score + 0.30 * s_score, 2)
 
+    judge_meta = response.get("_metadata", {})
+
     return {
         **candidate,
         "verdict": "PASS" if overall_pass else "FAIL",
@@ -161,6 +163,7 @@ Output JSON with your verdict ('PASS' only if all three gates pass, else 'FAIL')
         "composite_score": composite,
         "judge_rationale": response.get("rationale", candidate.get("rationale", "")),
         "spoiler_note": response.get("spoiler_note", "No critical spoiler identified."),
+        "judge_metadata": judge_meta,
     }
 
 

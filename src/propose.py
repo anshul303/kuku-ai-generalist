@@ -100,6 +100,7 @@ def propose_candidates(
     )
 
     raw_candidates = response.get("candidates", [])
+    proposal_meta = response.get("_metadata", {})
     candidates: List[Dict[str, Any]] = []
 
     for raw in raw_candidates:
@@ -140,6 +141,7 @@ def propose_candidates(
                 "hook_text": hook_beat.get("text", ""),
                 "cliffhanger_text": cliff_beat.get("text", ""),
                 "rationale": rationale,
+                "proposal_metadata": proposal_meta,
             }
         )
 
