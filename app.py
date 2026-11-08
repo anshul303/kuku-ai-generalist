@@ -62,7 +62,7 @@ st.caption(
     "*I Married a Broken Soldier. He was a Duke* (50 Episodes)"
 )
 
-tab_overview, tab_runner, tab_privacy = st.tabs(["🏆 Ranked Promos", "🚀 Run it yourself", "🔒 Privacy & Data Terms"])
+tab_overview, tab_runner = st.tabs(["🏆 Ranked Promos", "🚀 Run it yourself"])
 
 # ==============================================================================
 # TAB 1: RANKED PROMOS (PUBLIC DASHBOARD)
@@ -275,42 +275,3 @@ with tab_runner:
 
         with st.expander("Telemetry & Call Accounting"):
             st.json(run_res["usage"])
-
-
-# ==============================================================================
-# TAB 3: DATA & PRIVACY TERMS ANALYSIS
-# ==============================================================================
-with tab_privacy:
-    st.subheader("🔒 AI Provider Data Privacy & Terms Audit")
-    st.markdown(
-        "Screenplays represent valuable creative intellectual property. "
-        "Before sending script data to third-party APIs, data retention and training terms must be assessed:"
-    )
-
-    p1, p2 = st.columns(2)
-
-    with p1:
-        st.markdown("#### ☁️ Cloud Providers")
-        st.markdown(
-            """
-- **Google Gemini API (Free Tier)**:
-  - *Terms*: Data submitted via Google AI Studio Free Tier (Prompts, Content, and outputs) may be logged, reviewed by human reviewers, and used to improve Google products and machine learning models.
-  - *Implication*: Acceptable for technical prototyping; **not suitable for confidential/embargoed pre-release scripts** without upgrading to Google Cloud Vertex AI or paid enterprise tier.
-- **OpenAI API (Pay-as-you-go & Tier 1+)**:
-  - *Terms*: Under OpenAI's API Business Data Terms, data sent to OpenAI API endpoints is **not used to train models** (opt-out by default for API, unlike free consumer ChatGPT web).
-- **Anthropic Claude API**:
-  - *Terms*: Under commercial terms, API data is not used for generative model training.
-            """
-        )
-
-    with p2:
-        st.markdown("#### 🛡️ Local / Air-Gapped Providers")
-        st.markdown(
-            """
-- **OpenAI-Compatible Local Endpoint (`ollama`, `vLLM`)**:
-  - *Terms*: 100% on-premises execution on local hardware or private VPCs.
-  - *Zero Data Leakage*: Transmits zero bytes to external vendors. Complete compliance with NDAs and embargo periods.
-  - *Cost*: $0.00 token cost.
-  - *Integration*: Native support included in this application via the `openai_compatible` provider setting.
-            """
-        )

@@ -185,8 +185,13 @@ def main():
     parser.add_argument("--output-dir", default="outputs/raw_real_run1", help="Output directory.")
     parser.add_argument("--batch-size-eps", type=int, default=10, help="Episodes per propose call (default: 10).")
     parser.add_argument("--batch-size-judge", type=int, default=30, help="Clips per judge call (default: 30).")
+    parser.add_argument("--no-cache", action="store_true", help="Bypass LLM disk cache completely.")
 
     args = parser.parse_args()
+
+    if args.no_cache:
+        os.environ["BYPASS_CACHE"] = "true"
+        logger.info("Cache bypass enabled (--no-cache). All calls will go directly to the API.")
 
     os.makedirs(os.path.join(args.output_dir, "raw"), exist_ok=True)
     checkpoint_file = os.path.join(args.output_dir, "checkpoint.json")
@@ -365,20 +370,30 @@ def main():
         score_8_count = sum(1 for s in all_scores if abs(s - 8.0) < 0.05)
         fraction_score_8_0 = round(score_8_count / len(all_scores), 3) if all_scores else 0.0
 
+        api_model = "unknown"
+        for c in fully_judged_candidates:
+            if "judge_metadata" in c and "api_model_version" in c["judge_metadata"]:
+                api_model = c["judge_metadata"]["api_model_version"]
+                break
+        if api_model == "unknown":
+            api_model = args.model
+
         run_meta = {
             "timestamp": datetime.datetime.now().isoformat(),
             "model_requested": args.model,
-            "model_gateway_backend": (
-                "Google Gemini API routes 'gemini-3.5-flash' requests to the active production backend "
-                "(which returned quota error identifiers under 'gemini-3.6-flash'). "
-                "Running under 'gemini-3.5-flash-lite' utilizes the dedicated flash-lite quota pool."
+            "api_model_version_returned": api_model,
+            "observed_model_behavior": (
+                "Observed behavior: When requesting 'models/gemini-3.5-flash', the Google Gemini API returned a 429 quota error "
+                "identifying model: 'gemini-3.6-flash' ('Quota exceeded for metric: ... model: gemini-3.6-flash'). "
+                "When requesting 'models/gemini-3.5-flash-lite', the API returned HTTP 200 with modelVersion: 'gemini-3.5-flash-lite'."
             ),
             "runtime_seconds": runtime_sec,
             "total_calls": usage["total_calls"],
             "cache_hits": usage["cache_hits"],
             "prompt_tokens": usage["total_prompt_tokens"],
             "completion_tokens": usage["total_completion_tokens"],
-            "estimated_cost_usd": usage["total_estimated_cost_usd"],
+            "estimated_paid_tier_equivalent_usd": usage.get("estimated_paid_tier_equivalent_usd", usage["total_estimated_cost_usd"]),
+            "actual_free_tier_cost_usd": 0.0,
             "repair_reject_stats": {
                 "total_proposed": total_proposed_count,
                 "total_validated": len(all_validated_candidates),

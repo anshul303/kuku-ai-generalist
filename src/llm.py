@@ -86,7 +86,7 @@ class UsageStats:
         logger.info(
             f"[{provider.upper()}] Call #{self.total_calls}: "
             f"+{prompt_tokens} prompt / +{completion_tokens} completion tokens, "
-            f"est. cost ${cost:.5f} (Total cost: ${self.total_estimated_cost_usd:.4f})"
+            f"est. paid-tier equivalent ${cost:.5f} (Total: ${self.total_estimated_cost_usd:.4f}, Actual Free-Tier: $0.00)"
         )
 
 
@@ -99,6 +99,8 @@ def get_usage_summary() -> Dict[str, Any]:
         "cache_hits": GLOBAL_USAGE.cache_hits,
         "total_prompt_tokens": GLOBAL_USAGE.total_prompt_tokens,
         "total_completion_tokens": GLOBAL_USAGE.total_completion_tokens,
+        "estimated_paid_tier_equivalent_usd": round(GLOBAL_USAGE.total_estimated_cost_usd, 5),
+        "actual_free_tier_cost_usd": 0.0,
         "total_estimated_cost_usd": round(GLOBAL_USAGE.total_estimated_cost_usd, 5),
         "calls_by_provider": dict(GLOBAL_USAGE.calls_by_provider),
     }
@@ -125,7 +127,7 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
 
     # If directly parseable
     try:
-        return json.loads(text)
+        return json.loads(text, strict=False)
     except json.JSONDecodeError:
         pass
 
@@ -133,7 +135,7 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
     match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
     if match:
         try:
-            return json.loads(match.group(1))
+            return json.loads(match.group(1), strict=False)
         except json.JSONDecodeError:
             pass
 
@@ -263,11 +265,28 @@ def _call_gemini(
     }
 
     resp = None
+    data = None
+    text = ""
+    parsed = None
+
     for attempt in range(4):
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=60)
             if resp.status_code == 200:
-                break
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    logger.warning(f"Gemini returned 0 candidates on attempt {attempt+1}. Retrying...")
+                    time.sleep(2)
+                    continue
+                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                try:
+                    parsed = extract_json_from_text(text)
+                    break
+                except ValueError as json_err:
+                    logger.warning(f"Malformed JSON from Gemini on attempt {attempt+1}: {json_err}. Retrying in 2s...")
+                    time.sleep(2)
+                    continue
             elif resp.status_code == 429:
                 # Quota exceeded: Stop immediately and extract retry info
                 err_data = resp.json().get("error", {})
@@ -291,13 +310,8 @@ def _call_gemini(
         err_msg = resp.text[:300] if resp is not None else "No response"
         raise RuntimeError(f"Gemini API request failed after retries: {err_msg}")
 
-    data = resp.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
-        raise ValueError(f"Gemini returned 0 candidates: {data}")
-
-    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-    parsed = extract_json_from_text(text)
+    if parsed is None:
+        raise ValueError(f"Failed to obtain valid JSON from Gemini after 4 attempts. Last raw text:\n{text[:300]}...")
 
     # Normalize if LLM returns a top-level list
     if isinstance(parsed, list):
@@ -315,11 +329,15 @@ def _call_gemini(
         completion_tokens * PRICING_PER_MILLION["gemini"]["output"] / 1_000_000
     )
     GLOBAL_USAGE.log_call("gemini", prompt_tokens, completion_tokens, cost)
+    model_version = data.get("modelVersion", clean_model)
     parsed["_metadata"] = {
         "provider": "gemini",
-        "model": clean_model,
+        "model_requested": clean_model,
+        "api_model_version": model_version,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
+        "estimated_paid_tier_equivalent_usd": cost,
+        "actual_free_tier_cost_usd": 0.0,
         "cost_usd": cost,
     }
     return parsed
@@ -497,6 +515,7 @@ def complete_json(
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
     provider: Optional[str] = None,
+    bypass_cache: bool = False,
 ) -> Dict[str, Any]:
     """Main JSON completion interface supporting all providers with fallback and logging."""
     if not provider:
@@ -518,14 +537,16 @@ def complete_json(
 
     # Check disk cache
     cache_key = _get_cache_key(prompt, provider, resolved_model, schema)
-    cached_res = _load_cache(cache_key)
-    if cached_res is not None:
-        GLOBAL_USAGE.cache_hits += 1
-        logger.info(f"[CACHE HIT] Key {cache_key[:12]}... (0 API calls, $0.00 cost)")
-        cached_copy = json.loads(json.dumps(cached_res))
-        cached_copy.setdefault("_metadata", {})
-        cached_copy["_metadata"]["cached"] = True
-        return cached_copy
+    should_bypass = bypass_cache or (os.getenv("BYPASS_CACHE", "").lower() in ("true", "1", "yes"))
+    if not should_bypass:
+        cached_res = _load_cache(cache_key)
+        if cached_res is not None:
+            GLOBAL_USAGE.cache_hits += 1
+            logger.info(f"[CACHE HIT] Key {cache_key[:12]}... (0 API calls, $0.00 cost)")
+            cached_copy = json.loads(json.dumps(cached_res))
+            cached_copy.setdefault("_metadata", {})
+            cached_copy["_metadata"]["cached"] = True
+            return cached_copy
 
     if provider == "mock":
         p_tok = estimate_tokens(prompt)
