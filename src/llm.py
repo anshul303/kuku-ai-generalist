@@ -11,6 +11,9 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger("src.llm")
 logging.basicConfig(level=logging.INFO)
@@ -195,40 +198,70 @@ def _mock_judge_response(prompt: str) -> Dict[str, Any]:
 
 
 def _call_gemini(
-    prompt: str, schema: Optional[Dict[str, Any]] = None, model: str = "gemini-2.5-flash"
+    prompt: str, schema: Optional[Dict[str, Any]] = None, model: str = "gemini-3.5-flash"
 ) -> Dict[str, Any]:
-    """Call Google Gemini API using google-genai SDK or REST."""
+    """Call Google Gemini API using direct REST requests with retry and backoff."""
+    import time
+    import requests
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable not set")
 
-    from google import genai
-    from google.genai import types
+    clean_model = model.replace("models/", "")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
 
-    client = genai.Client(api_key=api_key)
+    payload: Dict[str, Any] = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.2,
+        },
+    }
 
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        temperature=0.2,
-    )
-    if schema:
-        config.response_schema = schema
+    resp = None
+    for attempt in range(5):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=45)
+            if resp.status_code == 200:
+                break
+            elif resp.status_code in (429, 503):
+                wait_sec = 2**attempt + 1
+                logger.warning(
+                    f"Gemini API {clean_model} returned {resp.status_code} on attempt {attempt+1}. "
+                    f"Backing off for {wait_sec}s..."
+                )
+                time.sleep(wait_sec)
+            else:
+                raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp.text[:300]}")
+        except requests.exceptions.RequestException as e:
+            if attempt == 4:
+                raise
+            time.sleep(2**attempt + 1)
+    else:
+        err_msg = resp.text[:300] if resp is not None else "No response"
+        raise RuntimeError(f"Gemini API rate limit exceeded after 5 retries: {err_msg}")
 
-    response = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=config,
-    )
+    data = resp.json()
+    candidates = data.get("candidates", [])
+    if not candidates:
+        raise ValueError(f"Gemini returned 0 candidates: {data}")
 
-    text = response.text or ""
+    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
     parsed = extract_json_from_text(text)
 
-    # Track usage if metadata available
-    prompt_tokens = estimate_tokens(prompt)
-    completion_tokens = estimate_tokens(text)
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", prompt_tokens)
-        completion_tokens = getattr(response.usage_metadata, "candidates_token_count", completion_tokens)
+    # Normalize if LLM returns a top-level list
+    if isinstance(parsed, list):
+        if schema and "rankings" in schema.get("properties", {}):
+            parsed = {"rankings": parsed}
+        else:
+            parsed = {"candidates": parsed}
+
+    # Real token tracking directly from Google API metadata
+    usage_meta = data.get("usageMetadata", {})
+    prompt_tokens = usage_meta.get("promptTokenCount", estimate_tokens(prompt))
+    completion_tokens = usage_meta.get("candidatesTokenCount", estimate_tokens(text))
 
     cost = (prompt_tokens * PRICING_PER_MILLION["gemini"]["input"] / 1_000_000) + (
         completion_tokens * PRICING_PER_MILLION["gemini"]["output"] / 1_000_000
@@ -236,7 +269,7 @@ def _call_gemini(
     GLOBAL_USAGE.log_call("gemini", prompt_tokens, completion_tokens, cost)
     parsed["_metadata"] = {
         "provider": "gemini",
-        "model": model,
+        "model": clean_model,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "cost_usd": cost,
@@ -269,6 +302,8 @@ def _call_openai(
 
     text = response.choices[0].message.content or "{}"
     parsed = extract_json_from_text(text)
+    if isinstance(parsed, list):
+        parsed = {"candidates": parsed}
 
     prompt_tokens = response.usage.prompt_tokens if response.usage else estimate_tokens(prompt)
     completion_tokens = response.usage.completion_tokens if response.usage else estimate_tokens(text)
@@ -312,6 +347,8 @@ def _call_anthropic(
 
     text = response.content[0].text if response.content else "{}"
     parsed = extract_json_from_text(text)
+    if isinstance(parsed, list):
+        parsed = {"candidates": parsed}
 
     prompt_tokens = response.usage.input_tokens if hasattr(response, "usage") else estimate_tokens(prompt)
     completion_tokens = response.usage.output_tokens if hasattr(response, "usage") else estimate_tokens(text)
@@ -379,34 +416,11 @@ def complete_json(
         }
         return res
 
-    try:
-        if provider == "gemini":
-            return _call_gemini(prompt, schema=schema, model=model or "gemini-2.5-flash")
-        elif provider == "openai":
-            return _call_openai(prompt, schema=schema, model=model or "gpt-4o-mini")
-        elif provider == "anthropic":
-            return _call_anthropic(prompt, schema=schema, model=model or "claude-3-5-haiku-latest")
-        else:
-            raise ValueError(f"Unknown provider '{provider}'. Choose from gemini, openai, anthropic, mock.")
-    except Exception as e:
-        logger.warning(f"Provider '{provider}' call failed ({e}). Falling back to mock provider.")
-        p_tok = estimate_tokens(prompt)
-        schema_props = schema.get("properties", {}) if schema else {}
-        if "candidates" in schema_props:
-            res = _mock_propose_response(prompt)
-        elif "rankings" in schema_props or "verdict" in schema_props:
-            res = _mock_judge_response(prompt)
-        elif "ruthless" in prompt.lower() or "evaluation gates" in prompt.lower():
-            res = _mock_judge_response(prompt)
-        else:
-            res = _mock_propose_response(prompt)
-        c_tok = estimate_tokens(json.dumps(res))
-        GLOBAL_USAGE.log_call("mock_fallback", p_tok, c_tok, 0.0)
-        res["_metadata"] = {
-            "provider": "mock_fallback",
-            "model": "mock-fallback",
-            "prompt_tokens": p_tok,
-            "completion_tokens": c_tok,
-            "cost_usd": 0.0,
-        }
-        return res
+    if provider == "gemini":
+        return _call_gemini(prompt, schema=schema, model=model or "gemini-3.5-flash")
+    elif provider == "openai":
+        return _call_openai(prompt, schema=schema, model=model or "gpt-4o-mini")
+    elif provider == "anthropic":
+        return _call_anthropic(prompt, schema=schema, model=model or "claude-3-5-haiku-latest")
+    else:
+        raise ValueError(f"Unknown provider '{provider}'. Choose from gemini, openai, anthropic, mock.")

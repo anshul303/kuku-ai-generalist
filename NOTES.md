@@ -25,3 +25,13 @@
    - Episode dialogues frequently contain emotion descriptors such as `(Cold, Commanding)` or growth terminology like `cold scrollers`.
    - Naive dispatch checking for substring `"cold"` or `"judge"` in prompt text caused candidate proposals to be routed to judge schemas.
    - Fixed by determining downstream task type strictly from the Pydantic/JSON schema properties (`candidates` vs `verdict` vs `rankings`), ensuring 100% deterministic intent matching regardless of script vocabulary.
+
+3. **Array vs Object Format Normalization in Gemini Output**:
+   - Gemini JSON mode (`gemini-3.5-flash`) often returns a raw top-level array `[{...}, {...}]` instead of wrapping in an object `{"candidates": [...]}`.
+   - Unhandled list indexing caused type errors and triggered mock fallback.
+   - Fixed by wrapping bare list returns into schema-compliant dictionary objects before metadata annotation and candidate parsing.
+
+4. **Removal of Silent Mock Fallback**:
+   - The engine previously caught provider exceptions and transparently substituted mock heuristic outputs.
+   - In production auditing, this masked API quota failures (e.g. Free Tier 20 requests/day limit) as "successful runs".
+   - Removed silent fallback: `--provider gemini` now strictly fails and surfaces the true upstream API status and error messages without obfuscation.
