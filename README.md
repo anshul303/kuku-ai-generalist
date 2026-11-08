@@ -92,3 +92,4 @@ python eval/evaluate.py
 
 ## 🔒 Confidentiality
 Screenplay files (`assets/`) are strictly git-ignored and not committed. The web app accepts scripts via dynamic user upload.
+# kuku-ai-generalist
