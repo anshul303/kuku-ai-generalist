@@ -170,7 +170,7 @@ def main():
         "--provider",
         "-p",
         default=os.getenv("LLM_PROVIDER", "gemini"),
-        help="LLM provider: 'gemini', 'openai', 'anthropic', or 'mock'.",
+        help="LLM provider: 'gemini', 'openai', 'anthropic', 'openai_compatible', or 'mock'.",
     )
     parser.add_argument(
         "--model",

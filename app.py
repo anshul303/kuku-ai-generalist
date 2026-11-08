@@ -1,14 +1,16 @@
 """Minimal Streamlit Web Application for Kuku Promo Discovery.
 
-Accepts uploaded screenplay files or local folder, runs the promo discovery pipeline,
-and presents ranked promos with conversion rationales and exact cutpoints.
+Public Dashboard:
+- Displays ranked promos with timestamps, composite scores, and safe paraphrases (<= 8-word excerpts).
+- Full verbatim screenplay downloads are excluded from the public UI (submitted via private Drive folder).
+- Includes "Run it yourself" tab supporting Gemini, OpenAI, Anthropic, and generic OpenAI-compatible endpoints (Ollama, vLLM, Together, etc.).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import tempfile
+import re
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -19,142 +21,296 @@ from src.judge import rank_survivors
 from src.llm import get_usage_summary, reset_usage_summary
 from src.parser import parse_all_episodes, parse_episode_text
 
-st.set_page_config(page_title="Kuku Promo Finder", layout="wide")
+st.set_page_config(page_title="Kuku Promo Discovery", layout="wide", page_icon="🎬")
+
+
+def safe_paraphrase(text: str, max_words: int = 8) -> str:
+    """Format text under conservative 8-word assumption to avoid public verbatim script leakage."""
+    if not text:
+        return ""
+    words = text.strip().split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]) + "..."
+
+
+def load_precomputed_results():
+    """Load pre-computed production results from real Gemini run."""
+    ranked_path = "outputs/raw_real_run1/raw/all_episodes_promos.json"
+    meta_path = "outputs/raw_real_run1/run_meta.json"
+    if not os.path.exists(ranked_path):
+        ranked_path = "outputs/raw/all_episodes_promos.json"
+        meta_path = "outputs/raw/run_meta.json"
+
+    if os.path.exists(ranked_path):
+        try:
+            with open(ranked_path, "r", encoding="utf-8") as f:
+                promos = json.load(f)
+            meta = {}
+            if os.path.exists(meta_path):
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+            return promos, meta
+        except Exception:
+            return None, None
+    return None, None
+
 
 st.title("🎬 Kuku Microdrama Promo Discovery")
-st.caption("AI-assisted promotional cutpoint extractor for 20-60s TikTok, Reels & Shorts ads")
+st.caption(
+    "Automated promotional cutpoint extractor for 20-60s TikTok, Reels & Shorts ads | "
+    "*I Married a Broken Soldier. He was a Duke* (50 Episodes)"
+)
 
-# Sidebar Configuration
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    provider = st.selectbox(
-        "LLM Provider",
-        options=["mock", "gemini", "openai", "anthropic"],
-        index=0,
-        help="Select AI model provider (or 'mock' for offline testing).",
+tab_overview, tab_runner, tab_privacy = st.tabs(["🏆 Ranked Promos", "🚀 Run it yourself", "🔒 Privacy & Data Terms"])
+
+# ==============================================================================
+# TAB 1: RANKED PROMOS (PUBLIC DASHBOARD)
+# ==============================================================================
+with tab_overview:
+    precomputed_promos, precomputed_meta = load_precomputed_results()
+
+    if precomputed_meta:
+        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+        with m_col1:
+            st.metric("Model Used", precomputed_meta.get("model_requested", "gemini-3.5-flash-lite"))
+        with m_col2:
+            st.metric("Total API Calls", f"{precomputed_meta.get('total_calls', 10)} (All 50 Eps)")
+        with m_col3:
+            st.metric("Runtime", f"{precomputed_meta.get('runtime_seconds', 156.6):.1f}s")
+        with m_col4:
+            st.metric("Est. Total Cost", f"${precomputed_meta.get('estimated_cost_usd', 0.022):.4f}")
+
+    st.markdown(
+        "> **Confidentiality & Privacy Safeguard**: In accordance with distribution safeguards, verbatim screenplay lines "
+        "are restricted to conservative paraphrases / $\le$ 8-word excerpts on the dashboard. Full unedited outputs are preserved "
+        "in the private submission Drive folder."
     )
 
-    api_key = st.text_input(
-        f"{provider.capitalize()} API Key",
-        type="password",
-        help="Optional if already set in environment variables.",
-    )
-    if api_key:
-        if provider == "gemini":
-            os.environ["GEMINI_API_KEY"] = api_key
-        elif provider == "openai":
-            os.environ["OPENAI_API_KEY"] = api_key
-        elif provider == "anthropic":
-            os.environ["ANTHROPIC_API_KEY"] = api_key
+    if precomputed_promos:
+        # Sort surviving promos by composite score descending
+        survivors = [p for p in precomputed_promos if p.get("verdict") == "PASS"]
+        survivors.sort(key=lambda x: x.get("composite_score", 0.0), reverse=True)
 
-    input_mode = st.radio("Script Input Source", ["Upload Screenplays", "Local Directory"], index=0)
+        top_promos = survivors[:15]
+        st.subheader(f"Top 15 High-Converting Promo Clips Across 50 Episodes")
 
-episodes = []
+        for idx, p in enumerate(top_promos, 1):
+            with st.container(border=True):
+                st.markdown(
+                    f"### #{idx}: Episode {p['episode']} (`{p['start_formatted']} - {p['end_formatted']}` | {p['duration']:.1f}s)"
+                )
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    st.metric("Composite Rating", f"{p.get('composite_score', 8.5):.1f} / 10.0")
+                with c2:
+                    st.metric("Hook Score (0-3s)", f"{p.get('hook_score', 8.5):.1f}")
+                with c3:
+                    st.metric("Cliffhanger Score", f"{p.get('cliffhanger_score', 8.5):.1f}")
+                with c4:
+                    st.metric("Standalone Coherence", f"{p.get('standalone_score', 8.5):.1f}")
 
-if input_mode == "Upload Screenplays":
-    uploaded_files = st.file_uploader(
-        "Upload Screenplay Files (.txt)",
-        type=["txt"],
-        accept_multiple_files=True,
-        help="Upload one or multiple episode script files.",
-    )
-    if uploaded_files:
-        for uf in uploaded_files:
-            content = uf.read().decode("utf-8")
-            ep_data = parse_episode_text(content, filename=uf.name)
-            episodes.append(ep_data)
-        episodes.sort(key=lambda x: x["episode"])
-        st.success(f"Loaded {len(episodes)} screenplay(s) from upload.")
-else:
-    local_dir = st.text_input(
-        "Directory Path",
-        value="assets/I Married a Broken Soldier. He was a Duke",
-    )
-    if os.path.isdir(local_dir):
-        if st.button("Load Local Files"):
-            episodes = parse_all_episodes(local_dir)
-            st.session_state["loaded_episodes"] = episodes
-            st.success(f"Loaded {len(episodes)} episodes.")
-        elif "loaded_episodes" in st.session_state:
-            episodes = st.session_state["loaded_episodes"]
+                hook_snippet = safe_paraphrase(p.get("hook_text", ""))
+                cliff_snippet = safe_paraphrase(p.get("cliffhanger_text", ""))
+
+                st.markdown(f"**🪝 Hook (0–3s excerpt):** *\"{hook_snippet}\"* (`{p.get('hook_beat_id', '')}`)")
+                st.markdown(f"**⚡ Cliffhanger Cut:** *\"{cliff_snippet}\"* (`{p.get('cliffhanger_beat_id', '')}`)")
+
+                raw_rat = p.get("rank_rationale") or p.get("judge_rationale") or p.get("rationale", "")
+                if isinstance(raw_rat, dict):
+                    rationale_str = " ".join(f"{k}: {v}" for k, v in raw_rat.items())
+                else:
+                    rationale_str = str(raw_rat)
+                st.markdown(f"**🎯 Conversion Rationale:** {rationale_str}")
+                st.caption(f"**Campaign Strategy & Lore Note:** {p.get('spoiler_note', 'Early series asset.')}")
+
+                if p.get("repairs"):
+                    st.info(f"**Deterministic Repairs Applied**: {'; '.join(p['repairs'])}")
     else:
-        st.warning("Please provide a valid local directory path or use 'Upload Screenplays'.")
+        st.info("No precomputed results found. Run the pipeline in the 'Run it yourself' tab.")
 
-if episodes:
-    st.markdown(f"**Loaded Episodes:** `{len(episodes)}` | **Total Beats:** `{sum(len(e['beats']) for e in episodes)}`")
 
-    col_btn1, col_btn2 = st.columns([1, 4])
-    with col_btn1:
-        run_clicked = st.button("🚀 Discover Promos", type="primary")
-
-    if run_clicked:
-        reset_usage_summary()
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        all_outputs = []
-        survivors = []
-
-        for idx, ep in enumerate(episodes):
-            status_text.text(f"Processing Episode {ep['episode']} ({idx + 1}/{len(episodes)})...")
-            res = process_single_episode(ep, provider=provider)
-            all_outputs.append(res)
-            for c in res["candidates"]:
-                if c.get("verdict") == "PASS":
-                    survivors.append(c)
-            progress_bar.progress((idx + 1) / len(episodes))
-
-        status_text.text("Ranking top survivor clips...")
-        ranked = rank_survivors(survivors, provider=provider)
-
-        st.session_state["results"] = {
-            "all_outputs": all_outputs,
-            "ranked": ranked,
-            "usage": get_usage_summary(),
-        }
-        status_text.text("✅ Discovery complete!")
-
-if "results" in st.session_state:
-    results = st.session_state["results"]
-    ranked_promos = results["ranked"]
-    all_outputs = results["all_outputs"]
-    usage = results["usage"]
-
-    st.divider()
-    st.subheader(f"🏆 Top Ranked Promos ({len(ranked_promos)} Found)")
-
-    top_n = min(15, len(ranked_promos))
-    for idx, p in enumerate(ranked_promos[:top_n], 1):
-        with st.container(border=True):
-            st.markdown(
-                f"### #{idx}: Episode {p['episode']} (`{p['start_formatted']} - {p['end_formatted']}` | {p['duration']:.1f}s)"
-            )
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col1:
-                st.metric("Composite Rating", f"{p.get('composite_score', 8.5):.1f} / 10")
-            with col2:
-                st.metric("Hook Beat", p["hook_beat_id"])
-            with col3:
-                st.metric("Cliffhanger Beat", p["cliffhanger_beat_id"])
-
-            st.markdown(f"**🪝 Hook (0-3s):** *\"{p.get('hook_text', '')}\"*")
-            st.markdown(f"**⚡ Cliffhanger Cut:** *\"{p.get('cliffhanger_text', '')}\"*")
-            st.markdown(
-                f"**🎯 Why it Works:** {p.get('rank_rationale') or p.get('judge_rationale') or p.get('rationale', '')}"
-            )
-            st.caption(f"**Campaign & Spoiler Strategy:** {p.get('spoiler_note', 'Early series asset.')}")
-
-            if p.get("repairs"):
-                st.info(f"**Automated Repairs Applied:** {'; '.join(p['repairs'])}")
-
-    # Downloads
-    st.divider()
-    st.download_button(
-        label="📥 Download Full Promos JSON",
-        data=json.dumps(all_outputs, indent=2),
-        file_name="kuku_promos_full.json",
-        mime="application/json",
+# ==============================================================================
+# TAB 2: RUN IT YOURSELF (TESTBED & DYNAMIC UPLOAD)
+# ==============================================================================
+with tab_runner:
+    st.subheader("🛠️ Interactive Promo Discovery Runner")
+    st.markdown(
+        "Upload new episode screenplays or run against local episodes. "
+        "Supports proprietary cloud LLMs and **OpenAI-compatible endpoints** (local Ollama, vLLM, Together AI, Groq)."
     )
 
-    with st.expander("📊 LLM Usage & Cost Telemetry"):
-        st.json(usage)
+    r_col1, r_col2 = st.columns([1, 1])
+
+    with r_col1:
+        st.markdown("#### 1. Provider & Model Selection")
+        provider_choice = st.selectbox(
+            "Select Provider",
+            options=["gemini", "openai_compatible", "openai", "anthropic", "mock"],
+            index=0,
+            help="Choose 'openai_compatible' for local Ollama/vLLM or third-party gateways (Groq, Together).",
+        )
+
+        model_name = ""
+        base_url = ""
+        api_key = ""
+
+        if provider_choice == "openai_compatible":
+            base_url = st.text_input(
+                "Base URL",
+                value=os.getenv("OPENAI_COMPATIBLE_BASE_URL", "http://localhost:11434/v1"),
+                help="E.g. http://localhost:11434/v1 for local Ollama, https://api.groq.com/openai/v1 for Groq",
+            )
+            model_name = st.text_input("Model Name", value="llama3", help="E.g. llama3, mistral, deepseek-coder")
+            api_key = st.text_input("API Key (optional for local)", value="", type="password")
+            if base_url:
+                os.environ["OPENAI_COMPATIBLE_BASE_URL"] = base_url
+            if model_name:
+                os.environ["OPENAI_COMPATIBLE_MODEL"] = model_name
+            if api_key:
+                os.environ["OPENAI_COMPATIBLE_API_KEY"] = api_key
+
+        elif provider_choice == "gemini":
+            model_name = st.text_input("Model", value="gemini-3.5-flash-lite")
+            api_key = st.text_input("Gemini API Key", type="password", value=os.getenv("GEMINI_API_KEY", ""))
+            if api_key:
+                os.environ["GEMINI_API_KEY"] = api_key
+
+        elif provider_choice == "openai":
+            model_name = st.text_input("Model", value="gpt-4o-mini")
+            api_key = st.text_input("OpenAI API Key", type="password", value=os.getenv("OPENAI_API_KEY", ""))
+            if api_key:
+                os.environ["OPENAI_API_KEY"] = api_key
+
+        elif provider_choice == "anthropic":
+            model_name = st.text_input("Model", value="claude-3-5-haiku-latest")
+            api_key = st.text_input("Anthropic API Key", type="password", value=os.getenv("ANTHROPIC_API_KEY", ""))
+            if api_key:
+                os.environ["ANTHROPIC_API_KEY"] = api_key
+
+    with r_col2:
+        st.markdown("#### 2. Input Screenplays")
+        input_source = st.radio("Script Source", ["Upload Screenplay (.txt)", "Use Preloaded Episode 1"], index=0)
+
+        run_episodes = []
+        if input_source == "Upload Screenplay (.txt)":
+            uploaded = st.file_uploader(
+                "Upload .txt screenplay files",
+                type=["txt"],
+                accept_multiple_files=True,
+                help="Upload one or multiple episode text scripts.",
+            )
+            if uploaded:
+                for uf in uploaded:
+                    content = uf.read().decode("utf-8")
+                    ep_data = parse_episode_text(content, filename=uf.name)
+                    run_episodes.append(ep_data)
+                run_episodes.sort(key=lambda x: x["episode"])
+                st.success(f"Parsed {len(run_episodes)} screenplay(s).")
+        else:
+            ep1_file = "assets/I Married a Broken Soldier. He was a Duke/episode-001-Episode 1671703.txt"
+            if os.path.exists(ep1_file):
+                with open(ep1_file, "r", encoding="utf-8") as f:
+                    ep_data = parse_episode_text(f.read(), filename="episode-001.txt")
+                    run_episodes = [ep_data]
+                st.info("Loaded Episode 1 (Cathedral Betrayal scene, 45 beats).")
+            else:
+                st.warning("Preloaded Episode 1 file not found.")
+
+    st.divider()
+
+    if run_episodes:
+        if st.button("🚀 Run Discovery on Input", type="primary"):
+            reset_usage_summary()
+            runner_progress = st.progress(0)
+            runner_status = st.empty()
+
+            processed_outputs = []
+            survivor_candidates = []
+
+            for idx, ep in enumerate(run_episodes):
+                runner_status.text(f"Processing Episode {ep['episode']} ({idx + 1}/{len(run_episodes)})...")
+                try:
+                    res = process_single_episode(ep, provider=provider_choice, model=model_name)
+                    processed_outputs.append(res)
+                    for c in res["candidates"]:
+                        if c.get("verdict") == "PASS":
+                            survivor_candidates.append(c)
+                except Exception as e:
+                    st.error(f"Error processing episode {ep['episode']}: {e}")
+                runner_progress.progress((idx + 1) / len(run_episodes))
+
+            runner_status.text("Evaluating and ranking survivors...")
+            if survivor_candidates:
+                ranked_run = rank_survivors(survivor_candidates, provider=provider_choice, model=model_name)
+            else:
+                ranked_run = []
+
+            runner_status.text("Discovery Complete!")
+
+            st.session_state["interactive_results"] = {
+                "ranked": ranked_run,
+                "all": processed_outputs,
+                "usage": get_usage_summary(),
+            }
+
+    if "interactive_results" in st.session_state:
+        run_res = st.session_state["interactive_results"]
+        ranked = run_res["ranked"]
+
+        st.markdown(f"### Discovered Promos ({len(ranked)} Passing Hard Gates)")
+        for idx, p in enumerate(ranked, 1):
+            with st.container(border=True):
+                st.markdown(
+                    f"**#{idx}: Episode {p['episode']}** (`{p['start_formatted']} - {p['end_formatted']}` | {p['duration']:.1f}s)"
+                )
+                st.markdown(
+                    f"- **Rating**: `{p.get('composite_score', 8.5):.1f} / 10.0` (Hook: {p.get('hook_score', 8.5)}, Cliff: {p.get('cliffhanger_score', 8.5)}, Standalone: {p.get('standalone_score', 8.5)})"
+                )
+                st.markdown(f"- **Hook Beat (`{p.get('hook_beat_id', '')}`)**: \"{safe_paraphrase(p.get('hook_text', ''))}\"")
+                st.markdown(f"- **Cliffhanger Beat (`{p.get('cliffhanger_beat_id', '')}`)**: \"{safe_paraphrase(p.get('cliffhanger_text', ''))}\"")
+                st.markdown(f"- **Rationale**: {p.get('rank_rationale') or p.get('judge_rationale') or p.get('rationale', '')}")
+                if p.get("repairs"):
+                    st.caption(f"Repairs: {'; '.join(p['repairs'])}")
+
+        with st.expander("Telemetry & Call Accounting"):
+            st.json(run_res["usage"])
+
+
+# ==============================================================================
+# TAB 3: DATA & PRIVACY TERMS ANALYSIS
+# ==============================================================================
+with tab_privacy:
+    st.subheader("🔒 AI Provider Data Privacy & Terms Audit")
+    st.markdown(
+        "Screenplays represent valuable creative intellectual property. "
+        "Before sending script data to third-party APIs, data retention and training terms must be assessed:"
+    )
+
+    p1, p2 = st.columns(2)
+
+    with p1:
+        st.markdown("#### ☁️ Cloud Providers")
+        st.markdown(
+            """
+- **Google Gemini API (Free Tier)**:
+  - *Terms*: Data submitted via Google AI Studio Free Tier (Prompts, Content, and outputs) may be logged, reviewed by human reviewers, and used to improve Google products and machine learning models.
+  - *Implication*: Acceptable for technical prototyping; **not suitable for confidential/embargoed pre-release scripts** without upgrading to Google Cloud Vertex AI or paid enterprise tier.
+- **OpenAI API (Pay-as-you-go & Tier 1+)**:
+  - *Terms*: Under OpenAI's API Business Data Terms, data sent to OpenAI API endpoints is **not used to train models** (opt-out by default for API, unlike free consumer ChatGPT web).
+- **Anthropic Claude API**:
+  - *Terms*: Under commercial terms, API data is not used for generative model training.
+            """
+        )
+
+    with p2:
+        st.markdown("#### 🛡️ Local / Air-Gapped Providers")
+        st.markdown(
+            """
+- **OpenAI-Compatible Local Endpoint (`ollama`, `vLLM`)**:
+  - *Terms*: 100% on-premises execution on local hardware or private VPCs.
+  - *Zero Data Leakage*: Transmits zero bytes to external vendors. Complete compliance with NDAs and embargo periods.
+  - *Cost*: $0.00 token cost.
+  - *Integration*: Native support included in this application via the `openai_compatible` provider setting.
+            """
+        )

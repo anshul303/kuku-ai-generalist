@@ -62,6 +62,8 @@ PRICING_PER_MILLION = {
     "gemini": {"input": 0.075, "output": 0.30},
     "openai": {"input": 0.15, "output": 0.60},
     "anthropic": {"input": 0.80, "output": 4.00},
+    "openai_compatible": {"input": 0.0, "output": 0.0},
+    "openai-compatible": {"input": 0.0, "output": 0.0},
     "mock": {"input": 0.0, "output": 0.0},
 }
 
@@ -412,6 +414,83 @@ def _call_anthropic(
     return parsed
 
 
+def _call_openai_compatible(
+    prompt: str,
+    schema: Optional[Dict[str, Any]] = None,
+    model: str = "default",
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Call any OpenAI-compatible API endpoint (Ollama, Together, Groq, vLLM, DeepSeek, LocalAI, etc.)."""
+    import requests
+
+    base = base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or os.getenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    key = api_key or os.getenv("OPENAI_COMPATIBLE_API_KEY") or os.getenv("OPENAI_API_KEY", "dummy-key")
+    resolved_model = model if model and model != "default" else (os.getenv("OPENAI_COMPATIBLE_MODEL") or "llama3")
+
+    url = f"{base.rstrip('/')}/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+    }
+    system_msg = (
+        "You are an expert short-form microdrama editor and ad strategist. "
+        "Always respond strictly with a valid JSON object matching the requested schema."
+    )
+    payload: Dict[str, Any] = {
+        "model": resolved_model,
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.2,
+    }
+
+    try:
+        resp = requests.post(
+            url,
+            headers=headers,
+            json={**payload, "response_format": {"type": "json_object"}},
+            timeout=120,
+        )
+        if resp.status_code != 200:
+            resp = requests.post(url, headers=headers, json=payload, timeout=120)
+    except Exception as e:
+        raise RuntimeError(f"Failed to connect to OpenAI-compatible provider at {url}: {e}")
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"OpenAI-compatible provider error ({resp.status_code}): {resp.text[:300]}")
+
+    data = resp.json()
+    choices = data.get("choices", [])
+    if not choices:
+        raise ValueError(f"OpenAI-compatible endpoint returned 0 choices: {data}")
+
+    text = choices[0].get("message", {}).get("content", "") or "{}"
+    parsed = extract_json_from_text(text)
+    if isinstance(parsed, list):
+        if schema and "rankings" in schema.get("properties", {}):
+            parsed = {"rankings": parsed}
+        else:
+            parsed = {"candidates": parsed}
+
+    usage = data.get("usage", {})
+    prompt_tokens = usage.get("prompt_tokens", estimate_tokens(prompt))
+    completion_tokens = usage.get("completion_tokens", estimate_tokens(text))
+    cost = 0.0
+
+    GLOBAL_USAGE.log_call("openai_compatible", prompt_tokens, completion_tokens, cost)
+    parsed["_metadata"] = {
+        "provider": "openai_compatible",
+        "model": resolved_model,
+        "base_url": base,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": cost,
+    }
+    return parsed
+
+
 def complete_json(
     prompt: str,
     schema: Optional[Dict[str, Any]] = None,
@@ -482,8 +561,12 @@ def complete_json(
         result = _call_openai(prompt, schema=schema, model=resolved_model)
     elif provider == "anthropic":
         result = _call_anthropic(prompt, schema=schema, model=resolved_model)
+    elif provider in ("openai_compatible", "openai-compatible", "local"):
+        result = _call_openai_compatible(prompt, schema=schema, model=resolved_model)
     else:
-        raise ValueError(f"Unknown provider '{provider}'. Choose from gemini, openai, anthropic, mock.")
+        raise ValueError(
+            f"Unknown provider '{provider}'. Choose from gemini, openai, anthropic, openai_compatible, mock."
+        )
 
     result.setdefault("_metadata", {})
     result["_metadata"]["cached"] = False

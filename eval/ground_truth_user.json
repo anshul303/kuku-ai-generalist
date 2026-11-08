@@ -1,0 +1,192 @@
+[
+  {
+    "episode": 1,
+    "title": "Cathedral Altar Betrayal",
+    "promos": [
+      {
+        "clip_id": "GT-E01-01",
+        "start_time": 11.3,
+        "end_time": 43.1,
+        "start_formatted": "00:11.30",
+        "end_formatted": "00:43.10",
+        "duration": 31.8,
+        "hook_beat_id": "E01-B003",
+        "cliffhanger_beat_id": "E01-B013",
+        "hook_description": "Matriarch coldly warns Juliana to turn around at the altar threshold.",
+        "cliffhanger_description": "Gerald reveals he is marrying Juliana's sister Clarissa instead; Juliana gasps 'No...'",
+        "editor_rationale": "High-velocity emotional shock hook stops cold scrollers within 1s. Cuts at the exact betrayal moment before explanation."
+      }
+    ]
+  },
+  {
+    "episode": 2,
+    "title": "Gerald's Public Humiliation",
+    "promos": [
+      {
+        "clip_id": "GT-E02-01",
+        "start_time": 0.0,
+        "end_time": 40.5,
+        "start_formatted": "00:00.00",
+        "end_formatted": "00:40.50",
+        "duration": 40.5,
+        "hook_beat_id": "E02-B001",
+        "cliffhanger_beat_id": "E02-B013",
+        "hook_description": "Gerald delivers devastating opening line: 'I cannot marry you, Juliana. You are far too plain... far too silent...'",
+        "cliffhanger_description": "Juliana confronts Gerald and Clarissa publicly in front of high society before storming away.",
+        "editor_rationale": "Vicious insult hook generates instant indignation and empathy for the protagonist."
+      }
+    ]
+  },
+  {
+    "episode": 3,
+    "title": "The Scarred Warrior's Intervention & Proposal",
+    "promos": [
+      {
+        "clip_id": "GT-E03-01",
+        "start_time": 109.9,
+        "end_time": 145.8,
+        "start_formatted": "01:09.90",
+        "end_formatted": "02:25.80",
+        "duration": 35.9,
+        "hook_beat_id": "E03-B043",
+        "cliffhanger_beat_id": "E03-B057",
+        "hook_description": "Scarred warrior commands 'Take your hands off her!' and physically intercepts the cathedral guards.",
+        "cliffhanger_description": "The imposing stranger drops to one knee and asks Lady Juliana to accept his hand in marriage.",
+        "editor_rationale": "Classic romance trope execution: lethal hero protection followed by a shocking public marriage proposal cliffhanger."
+      }
+    ]
+  },
+  {
+    "episode": 4,
+    "title": "Defying the Mocking Aristocrats",
+    "promos": [
+      {
+        "clip_id": "GT-E04-01",
+        "start_time": 1.5,
+        "end_time": 48.2,
+        "start_formatted": "00:01.50",
+        "end_formatted": "00:48.20",
+        "duration": 46.7,
+        "hook_beat_id": "E04-B002",
+        "cliffhanger_beat_id": "E04-B016",
+        "hook_description": "Gerald mocks the new couple: 'A penniless nobody for a discarded bride.'",
+        "cliffhanger_description": "Juliana firmly takes the warrior's hand, accepting exile over family cruelty.",
+        "editor_rationale": "Clear underdog dynamic where the rejected bride claims her autonomy."
+      }
+    ]
+  },
+  {
+    "episode": 5,
+    "title": "Mother's Ledger Cast in Mud",
+    "promos": [
+      {
+        "clip_id": "GT-E05-01",
+        "start_time": 4.2,
+        "end_time": 54.5,
+        "start_formatted": "00:04.20",
+        "end_formatted": "00:54.50",
+        "duration": 50.3,
+        "hook_beat_id": "E05-B002",
+        "cliffhanger_beat_id": "E05-B018",
+        "hook_description": "Cruel stepmother snatches Juliana's late mother's ledger and hurls it into the muddy cobblestones.",
+        "cliffhanger_description": "Alexander steps through the guards into the mud to reclaim the sacred heirloom.",
+        "editor_rationale": "Visceral sensory humiliation (physical destruction of mother's keepsake) followed by knightly defense."
+      }
+    ]
+  },
+  {
+    "episode": 6,
+    "title": "Exile in the Woodland Cottage",
+    "promos": [
+      {
+        "clip_id": "GT-E06-01",
+        "start_time": 0.0,
+        "end_time": 38.5,
+        "start_formatted": "00:00.00",
+        "end_formatted": "00:38.50",
+        "duration": 38.5,
+        "hook_beat_id": "E06-B001",
+        "cliffhanger_beat_id": "E06-B012",
+        "hook_description": "Torrents of rain pour through a dense tree canopy as Juliana steps into a ruined rustic cabin.",
+        "cliffhanger_description": "Alexander tells her 'I know this is not the life you came from' as she turns to face him.",
+        "editor_rationale": "Atmospheric shift highlighting the stark contrast from nobility to woodland survival."
+      }
+    ]
+  },
+  {
+    "episode": 7,
+    "title": "Confrontation at the Cottage",
+    "promos": [
+      {
+        "clip_id": "GT-E07-01",
+        "start_time": 19.5,
+        "end_time": 68.0,
+        "start_formatted": "00:19.50",
+        "end_formatted": "01:08.00",
+        "duration": 48.5,
+        "hook_beat_id": "E07-B005",
+        "cliffhanger_beat_id": "E07-B018",
+        "hook_description": "Aristocratic carriage pulls up and highborn woman sneers 'This is where you live now?'",
+        "cliffhanger_description": "Alexander arrives silently from the woods carrying heavy timber and steps into view.",
+        "editor_rationale": "Status taunting followed by an intimidating silent protector entrance."
+      }
+    ]
+  },
+  {
+    "episode": 8,
+    "title": "Herbal Secrets & War Scars",
+    "promos": [
+      {
+        "clip_id": "GT-E08-01",
+        "start_time": 0.0,
+        "end_time": 42.0,
+        "start_formatted": "00:00.00",
+        "end_formatted": "00:42.00",
+        "duration": 42.0,
+        "hook_beat_id": "E08-B001",
+        "cliffhanger_beat_id": "E08-B014",
+        "hook_description": "Juliana inspects damaged botanical grimoire: 'Some of the pages are ruined. Careful.'",
+        "cliffhanger_description": "Alexander reveals his intimate knowledge of battle wounds and medicinal salves.",
+        "editor_rationale": "Intimate lore reveal establishing the protagonist's medical expertise."
+      }
+    ]
+  },
+  {
+    "episode": 9,
+    "title": "Emergency Night Rescue of Sick Child",
+    "promos": [
+      {
+        "clip_id": "GT-E09-01",
+        "start_time": 0.0,
+        "end_time": 48.2,
+        "start_formatted": "00:00.00",
+        "end_formatted": "00:48.20",
+        "duration": 48.2,
+        "hook_beat_id": "E09-B002",
+        "cliffhanger_beat_id": "E09-B018",
+        "hook_description": "Violent, frantic pounding echoes against the heavy cottage door in the dead of night.",
+        "cliffhanger_description": "Frantic mother begs Juliana to save her dying child, with Juliana preparing the critical remedy.",
+        "editor_rationale": "Urgent life-or-death crisis hook creates immediate scroller retention and stakes."
+      }
+    ]
+  },
+  {
+    "episode": 10,
+    "title": "Wounded Hero & Intimate Care",
+    "promos": [
+      {
+        "clip_id": "GT-E10-01",
+        "start_time": 0.0,
+        "end_time": 48.0,
+        "start_formatted": "00:00.00",
+        "end_formatted": "00:48.00",
+        "duration": 48.0,
+        "hook_beat_id": "E10-B002",
+        "cliffhanger_beat_id": "E10-B015",
+        "hook_description": "Cottage door bangs open; Alexander staggers inside drenched in fresh blood.",
+        "cliffhanger_description": "Juliana tears open his tunic to dress the deep wound, locking eyes as his armor is removed.",
+        "editor_rationale": "High-impact visual shock hook (blood, wounded protector) flowing into vulnerable romance tension."
+      }
+    ]
+  }
+]
